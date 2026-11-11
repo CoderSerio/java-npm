@@ -11,6 +11,8 @@ The reference to npm is the familiar workflow and consideration of optical align
 
 ## Usage
 
-Use the [horizontal lockup](../../assets/brand/jpm-readme.png) with its light background panel. Preserve its aspect ratio and leave at least one wordmark-stroke width of clear space around it. For avatars, use the [standalone icon](../../assets/brand/jpm-icon.png); do not squeeze the entire wordmark into a square. Check the terminal cuts at the actual display size, particularly below 32 px.
+Use the transparent [dark green lockup](../../assets/brand/jpm-readme.png) on light backgrounds and the transparent [light green lockup](../../assets/brand/jpm-readme-dark.png) on dark backgrounds. Both READMEs select the appropriate static PNG through a `<picture>` element, with the light-background version as the fallback. Do not add a rectangular background panel.
 
-The current asset is a PNG refinement, not a vector master. Do not describe it as an SVG or scale it indefinitely for print. Final dark-background and monochrome exports should be reviewed separately. The design was developed with AI image-generation assistance and human direction; the logo must not imply endorsement by Java, npm, Maven, or Spring.
+Preserve the aspect ratio and leave at least one wordmark-stroke width of clear space around the lockup. For avatars, use the [standalone icon](../../assets/brand/jpm-icon.png) on a light background; do not squeeze the entire wordmark into a square. Check the terminal cuts at the actual display size, particularly below 32 px.
+
+The current assets are PNG refinements, not vector masters. Do not describe them as SVGs or scale them indefinitely for print. Monochrome exports need a separate review. The design was developed with AI image-generation assistance and human direction; the logo must not imply endorsement by Java, npm, Maven, or Spring.
