@@ -1,0 +1,27 @@
+{
+  "name": "java-npm",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A frontend-friendly workflow for Java and Spring Boot",
+  "type": "module",
+  "bin": {
+    "jpm": "bin/jpm.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check bin/jpm.js && node --check bin/create-jpm.js && node --test"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "VALIDATION.md"
+  ],
+  "dependencies": {
+    "fast-xml-parser": "^5.12.0",
+    "tar": "^7.5.22"
+  }
+}
