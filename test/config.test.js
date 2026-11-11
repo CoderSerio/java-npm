@@ -3,7 +3,7 @@ import { chmod, mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, symlink, 
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { parseJpmrc, readJavaConfig, writeJavaConfig } from '../src/config.js';
+import { parseJpmrc, readJavaConfig, writeJavaConfig } from '../dist/config.js';
 
 async function fixture(t) {
   const directory = await realpath(await mkdtemp(path.join(tmpdir(), 'jpm-config-test-')));

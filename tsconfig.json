@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2025",
+    "module": "NodeNext",
+    "strict": true,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+    "rootDir": "src",
+    "outDir": "dist",
+    "types": [
+      "node"
+    ],
+    "noEmitOnError": true,
+    "forceConsistentCasingInFileNames": true,
+    "lib": [
+      "ES2025"
+    ]
+  },
+  "include": [
+    "src/**/*.ts"
+  ]
+}

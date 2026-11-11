@@ -1,17 +1,18 @@
+import { errorCode } from './validation.js';
 import { randomUUID } from 'node:crypto';
 import { chmod, lstat, readFile, realpath, rename, unlink, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 
-function javaVersion(value, source) {
+function javaVersion(value: unknown, source: string) {
   if (!/^\d{2}$/.test(String(value)) || Number(value) < 17) {
     throw new Error(`${source}: java must be a major version from 17 to 99, such as java=21.`);
   }
   return String(value);
 }
 
-export function parseJpmrc(text, filename = '.jpmrc') {
-  const result = {};
+export function parseJpmrc(text: string, filename = '.jpmrc') {
+  const result: { java?: string } = {};
   for (const [index, line] of text.replace(/^\uFEFF/, '').split(/\r?\n/).entries()) {
     const content = line.replace(/[#;].*$/, '').trim();
     if (!content) continue;
@@ -26,19 +27,19 @@ export function parseJpmrc(text, filename = '.jpmrc') {
   return result;
 }
 
-async function fileInfo(file) {
+async function fileInfo(file: string) {
   try { return await lstat(file); }
-  catch (error) { if (error.code === 'ENOENT') return undefined; throw error; }
+  catch (error) { if (errorCode(error) === 'ENOENT') return undefined; throw error; }
 }
 
-async function directories(cwd, homeDir) {
+async function directories(cwd: string, homeDir: string) {
   return {
     cwd: await realpath(cwd),
-    homeDir: await realpath(homeDir).catch(error => { if (error.code === 'ENOENT') return path.resolve(homeDir); throw error; }),
+    homeDir: await realpath(homeDir).catch(error => { if (errorCode(error) === 'ENOENT') return path.resolve(homeDir); throw error; }),
   };
 }
 
-async function findProjectFile(cwd, homeDir, forWrite = false) {
+async function findProjectFile(cwd: string, homeDir: string, forWrite = false) {
   for (let directory = cwd; directory !== homeDir; directory = path.dirname(directory)) {
     const file = path.join(directory, '.jpmrc');
     if (await fileInfo(file)) return file;
@@ -49,7 +50,7 @@ async function findProjectFile(cwd, homeDir, forWrite = false) {
   return undefined;
 }
 
-export async function readJavaConfig(cwd, { homeDir = homedir(), fallbackVersion } = {}) {
+export async function readJavaConfig(cwd: string, { homeDir = homedir(), fallbackVersion }: { homeDir?: string; fallbackVersion?: string | number } = {}) {
   const locations = await directories(cwd, homeDir);
   const projectFile = await findProjectFile(locations.cwd, locations.homeDir);
   const userFile = path.join(locations.homeDir, '.jpmrc');
@@ -61,7 +62,7 @@ export async function readJavaConfig(cwd, { homeDir = homedir(), fallbackVersion
   return { version: user.java, source: user.java === undefined ? undefined : userFile, projectFile };
 }
 
-export async function writeJavaConfig(cwd, version, { global = false, homeDir = homedir() } = {}) {
+export async function writeJavaConfig(cwd: string, version: string | number, { global = false, homeDir = homedir() } = {}) {
   const major = javaVersion(version, '.jpmrc');
   const locations = await directories(cwd, homeDir);
   if (!global && locations.cwd === locations.homeDir) {
@@ -84,7 +85,7 @@ export async function writeJavaConfig(cwd, version, { global = false, homeDir = 
     if (info) await chmod(temporary, info.mode & 0o777);
     await rename(temporary, file);
   } finally {
-    await unlink(temporary).catch(error => { if (error.code !== 'ENOENT') throw error; });
+    await unlink(temporary).catch(error => { if (errorCode(error) !== 'ENOENT') throw error; });
   }
   return file;
 }

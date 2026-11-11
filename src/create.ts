@@ -1,22 +1,30 @@
+import { errorCode, isRecord } from './validation.js';
 import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
 import * as tar from 'tar';
-import { syncPom } from './project.js';
+import { syncPom, validateManifest, isScope, type JavaDependency, type JavaConfiguration } from './project.js';
 import { readJavaConfig } from './config.js';
-import { packCli } from './distribution.js';
+
+interface CreateOptions {
+  cwd?: string;
+  java?: string;
+  boot?: string;
+  group?: string;
+  packageName?: string;
+}
 
 const INITIALIZR = 'https://start.spring.io';
 const MAX_ARCHIVE = 8 * 1024 * 1024;
 const MAX_EXPANDED = 16 * 1024 * 1024;
 const JAVA_KEYWORDS = new Set('abstract assert boolean break byte case catch char class const continue default do double else enum extends final finally float for goto if implements import instanceof int interface long native new package private protected public return short static strictfp super switch synchronized this throw throws transient try void volatile while true false null _'.split(' '));
 
-function javaPackage(value) {
+function javaPackage(value: unknown) {
   return typeof value === 'string' && value.length <= 160 && value.split('.').every(part => /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(part) && !JAVA_KEYWORDS.has(part));
 }
 
-async function download(url, limit, accept) {
+async function download(url: string, limit: number, accept: string) {
   const response = await fetch(url, {
     headers: { Accept: accept, 'User-Agent': 'jpm/0.1.0' },
     signal: AbortSignal.timeout(30_000),
@@ -37,42 +45,51 @@ async function download(url, limit, accept) {
   return Buffer.concat(chunks);
 }
 
-function dependenciesFromPom(xml, expected) {
+function dependenciesFromPom(xml: string, expected: Omit<JavaConfiguration, 'dependencies'>) {
   if (/<!DOCTYPE|<!ENTITY/i.test(xml) || XMLValidator.validate(xml) !== true) throw new Error('Spring Initializr returned an invalid POM.');
-  const project = new XMLParser({ parseTagValue: false, ignoreAttributes: true }).parse(xml).project;
-  const fail = () => { throw new Error('The generated POM contains unsupported configuration. jpm supports the standard Spring MVC template only.'); };
-  if (!project || project.parent?.groupId !== 'org.springframework.boot' || project.parent?.artifactId !== 'spring-boot-starter-parent' || project.parent?.version !== expected.springBoot) fail();
-  if (project.groupId !== expected.groupId || project.artifactId !== expected.artifactId || project.properties?.['java.version'] !== expected.version) fail();
+  const fail = (): never => { throw new Error('The generated POM contains unsupported configuration. jpm supports the standard Spring MVC template only.'); };
+  const record = (value: unknown): Record<string, unknown> => isRecord(value) ? value : fail();
+  const parsed: unknown = new XMLParser({ parseTagValue: false, ignoreAttributes: true }).parse(xml);
+  const project = record(record(parsed).project);
+  const parent = record(project.parent);
+  const properties = record(project.properties);
+  if (parent.groupId !== 'org.springframework.boot' || parent.artifactId !== 'spring-boot-starter-parent' || parent.version !== expected.springBoot) fail();
+  if (project.groupId !== expected.groupId || project.artifactId !== expected.artifactId || properties['java.version'] !== expected.version) fail();
   for (const field of ['dependencyManagement', 'repositories', 'pluginRepositories', 'profiles', 'modules', 'reporting']) {
     if (project[field] !== undefined) fail();
   }
-  if (Object.keys(project.properties ?? {}).some(key => key !== 'java.version')) fail();
-  if (Object.keys(project.build ?? {}).some(key => key !== 'plugins')) fail();
-  const plugins = [project.build?.plugins?.plugin].flat().filter(Boolean);
+  if (Object.keys(properties).some(key => key !== 'java.version')) fail();
+  const build = record(project.build);
+  if (Object.keys(build).some(key => key !== 'plugins')) fail();
+  const plugins = [record(build.plugins).plugin].flat().filter(Boolean).map(record);
   if (plugins.length !== 1 || plugins[0].groupId !== 'org.springframework.boot' || plugins[0].artifactId !== 'spring-boot-maven-plugin' || Object.keys(plugins[0]).some(key => !['groupId', 'artifactId'].includes(key))) fail();
-  const dependencies = {};
-  for (const dependency of [project.dependencies?.dependency].flat().filter(Boolean)) {
+  const dependencies: Record<string, JavaDependency> = {};
+  for (const dependency of [record(project.dependencies).dependency].flat().filter(Boolean).map(record)) {
     if (Object.keys(dependency).some(key => !['groupId', 'artifactId', 'version', 'scope', 'optional'].includes(key))) fail();
     if (typeof dependency.groupId !== 'string' || typeof dependency.artifactId !== 'string') fail();
     const coordinate = `${dependency.groupId}:${dependency.artifactId}`;
     if (Object.hasOwn(dependencies, coordinate)) fail();
-    const value = {};
-    if (dependency.version !== undefined) value.version = dependency.version;
+    const value: JavaDependency = {};
+    if (dependency.version !== undefined) {
+      if (typeof dependency.version !== 'string') return fail();
+      value.version = dependency.version;
+    }
     if (dependency.scope !== undefined) {
-      if (!['compile', 'runtime', 'test', 'provided'].includes(dependency.scope)) fail();
+      if (!isScope(dependency.scope)) return fail();
       value.scope = dependency.scope;
     }
     if (dependency.optional !== undefined) {
-      if (!['true', 'false'].includes(dependency.optional)) fail();
+      if (dependency.optional !== 'true' && dependency.optional !== 'false') fail();
       value.optional = dependency.optional === 'true';
     }
     dependencies[coordinate] = value;
   }
-  if (!Object.keys(dependencies).length || typeof project.version !== 'string') fail();
+  if (!Object.keys(dependencies).length || typeof project.version !== 'string') return fail();
+  validateManifest({ version: project.version, java: { ...expected, dependencies } });
   return { version: project.version, dependencies };
 }
 
-async function extractArchive(archive, directory) {
+async function extractArchive(archive: Buffer, directory: string) {
   // Bound the complete decompressed stream, including headers and padding.
   const unpacked = gunzipSync(archive, { maxOutputLength: MAX_EXPANDED });
   const archiveFile = path.join(directory, 'starter.tar');
@@ -98,7 +115,7 @@ async function extractArchive(archive, directory) {
   if (invalid) throw invalid;
   if (!entries) throw new Error('Spring Initializr returned an empty archive.');
   await mkdir(output);
-  await tar.x({ file: archiveFile, cwd: output, strict: true, preserveOwner: false, filter: (_name, entry) => ['File', 'OldFile', 'Directory'].includes(entry.type) });
+  await tar.x({ file: archiveFile, cwd: output, strict: true, preserveOwner: false, filter: (_name, entry) => 'type' in entry && ['File', 'OldFile', 'Directory'].includes(entry.type) });
   for (const required of ['pom.xml', 'mvnw', 'mvnw.cmd', '.mvn/wrapper/maven-wrapper.properties']) {
     if (!(await lstat(path.join(output, required))).isFile()) throw new Error(`Generated project is missing ${required}.`);
   }
@@ -106,7 +123,7 @@ async function extractArchive(archive, directory) {
   return output;
 }
 
-function controller(packageName) {
+function controller(packageName: string) {
   return `package ${packageName};
 
 import java.util.Map;
@@ -123,7 +140,7 @@ public class HelloController {
 `;
 }
 
-function controllerTest(packageName) {
+function controllerTest(packageName: string) {
   return `package ${packageName};
 
 import java.net.URI;
@@ -152,7 +169,7 @@ class JpmHelloTests {
 `;
 }
 
-export async function createProject(name, options = {}) {
+export async function createProject(name: string, options: CreateOptions = {}) {
   if (typeof name !== 'string' || !/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(name) || name.length > 80) throw new Error('Use a project name such as my-app: lowercase letters, numbers, and single hyphens.');
   const groupId = options.group ?? 'com.example';
   const packageName = options.packageName ?? `${groupId}.${name.replaceAll('-', '')}`;
@@ -165,12 +182,16 @@ export async function createProject(name, options = {}) {
     await lstat(directory);
     throw new Error(`Destination already exists: ${directory}`);
   } catch (error) {
-    if (error.code !== 'ENOENT') throw error;
+    if (errorCode(error) !== 'ENOENT') throw error;
   }
-  const metadata = JSON.parse((await download(`${INITIALIZR}/`, 2 * 1024 * 1024, 'application/vnd.initializr.v2.3+json')).toString());
-  const springBoot = options.boot ?? metadata.bootVersion?.default;
-  if (typeof springBoot !== 'string' || !metadata.bootVersion?.values?.some(item => item.id === springBoot)) throw new Error('Select a Spring Boot version supported by Spring Initializr.');
-  if (!metadata.javaVersion?.values?.some(item => item.id === javaVersion)) throw new Error(`Spring Initializr does not support Java ${javaVersion}.`);
+  const metadata: unknown = JSON.parse((await download(`${INITIALIZR}/`, 2 * 1024 * 1024, 'application/vnd.initializr.v2.3+json')).toString());
+  if (!isRecord(metadata) || !isRecord(metadata.bootVersion) || !isRecord(metadata.javaVersion)
+    || !Array.isArray(metadata.bootVersion.values) || !Array.isArray(metadata.javaVersion.values)) {
+    throw new Error('Spring Initializr returned invalid version metadata.');
+  }
+  const springBoot = options.boot ?? metadata.bootVersion.default;
+  if (typeof springBoot !== 'string' || !metadata.bootVersion?.values?.some((item: unknown) => isRecord(item) && item.id === springBoot)) throw new Error('Select a Spring Boot version supported by Spring Initializr.');
+  if (!metadata.javaVersion?.values?.some((item: unknown) => isRecord(item) && item.id === javaVersion)) throw new Error(`Spring Initializr does not support Java ${javaVersion}.`);
   const query = new URLSearchParams({ type: 'maven-project', language: 'java', packaging: 'jar', javaVersion, bootVersion: springBoot, groupId, artifactId: name, name, packageName, dependencies: 'web,devtools' });
   const staging = await mkdtemp(path.join(cwd, '.jpm-create-'));
   let reserved = false;
@@ -178,12 +199,10 @@ export async function createProject(name, options = {}) {
     const project = await extractArchive(await download(`${INITIALIZR}/starter.tgz?${query}`, MAX_ARCHIVE, 'application/x-compress'), staging);
     const java = { version: javaVersion, springBoot, groupId, artifactId: name, packageName };
     const parsed = dependenciesFromPom(await readFile(path.join(project, 'pom.xml'), 'utf8'), java);
-    const cli = await packCli(path.join(project, 'vendor'));
     const manifest = {
       name, version: parsed.version, private: true,
       scripts: { dev: 'jpm dev', build: 'jpm build', test: 'jpm test' },
       java: { ...java, dependencies: parsed.dependencies },
-      devDependencies: { [cli.name]: `file:vendor/${cli.filename}` },
     };
     await writeFile(path.join(project, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx' });
     await writeFile(path.join(project, '.jpmrc'), `# JDK used to run Maven. The compile target remains in package.json.\njava=${javaVersion}\n`, { flag: 'wx' });
@@ -198,10 +217,10 @@ export async function createProject(name, options = {}) {
       await mkdir(path.dirname(filename), { recursive: true });
       await writeFile(filename, content, { flag: 'wx' });
     }
-    await writeFile(path.join(project, 'README.md'), `# ${name}\n\nA Spring Boot application created with jpm. Requires jpm on PATH, Node.js 22+ and Java ${javaVersion}.\n\n\`\`\`sh\njpm install\njpm dev\n# In another terminal:\ncurl http://localhost:8080/\njpm test\njpm build\n\`\`\`\n\nGET / returns \`{"message":"Hello from jpm!"}\`.\n\nEdit Java dependencies in \`package.json\` under \`java.dependencies\`, then run \`jpm install\`. The POM is generated; do not edit it directly.\n\nThe project JDK is selected in \`.jpmrc\` (\`java=${javaVersion}\`). \`package.json.java.version\` remains the compile target. Use \`jpm jdk list\` to see installed JDKs and \`jpm jdk use <major>\` to save a project selection. To also switch your current bash/zsh terminal, run \`eval "$(jpm jdk env)"\`.\n\nThis preview includes \`java-npm@${cli.version}\` in \`vendor/${cli.filename}\`. Commit that archive with the project. Its relative dependency survives moving or sharing this directory and does not require the original CLI checkout. A teammate can install this CLI once with \`npm install --global ./vendor/${cli.filename}\`, then use \`jpm\` for all Java project commands. The normal workflow does not need npm install or node_modules in this project. npm scripts and the local CLI dependency are optional compatibility entries. The preview has not been published to npm.\n`, { flag: 'wx' });
+    await writeFile(path.join(project, 'README.md'), `# ${name}\n\nA Spring Boot application created with jpm. Requires jpm on PATH, Node.js 26+ and Java ${javaVersion}.\n\n\`\`\`sh\njpm install\njpm dev\n# In another terminal:\ncurl http://localhost:8080/\njpm test\njpm build\n\`\`\`\n\nGET / returns \`{"message":"Hello from jpm!"}\`.\n\nEdit Java dependencies in \`package.json\` under \`java.dependencies\`, then run \`jpm install\`. The POM is generated; do not edit it directly.\n\nThe project JDK is selected in \`.jpmrc\` (\`java=${javaVersion}\`). \`package.json.java.version\` remains the compile target. Use \`jpm jdk list\` to see installed JDKs and \`jpm jdk use <major>\` to save a project selection. To also switch your current bash/zsh terminal, run \`eval "$(jpm jdk env)"\`.\n\nInstall the CLI with \`npm install --global java-npm@alpha\` before running these commands. Java dependencies are resolved by Maven through jpm; this project does not need npm install, node_modules, or a bundled CLI archive. npm scripts are optional aliases for an already installed jpm.\n`, { flag: 'wx' });
     const ignore = path.join(project, '.gitignore');
-    const originalIgnore = await readFile(ignore, 'utf8').catch(error => { if (error.code === 'ENOENT') return ''; throw error; });
-    await writeFile(ignore, `${originalIgnore.trimEnd()}\nnode_modules/\n.jpm/\n!vendor/\n!vendor/${cli.filename}\n`);
+    const originalIgnore = await readFile(ignore, 'utf8').catch(error => { if (errorCode(error) === 'ENOENT') return ''; throw error; });
+    await writeFile(ignore, `${originalIgnore.trimEnd()}\nnode_modules/\n.jpm/\n`);
     // Exclusive mkdir prevents a late-created destination from being overwritten.
     await mkdir(directory);
     reserved = true;

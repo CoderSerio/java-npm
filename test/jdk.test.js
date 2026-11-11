@@ -7,7 +7,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { promisify } from 'node:util';
 import { c as pack } from 'tar';
-import { installJdk, listJdks, resolveJdk, shellEnvironment } from '../src/jdk.js';
+import { installJdk, listJdks, resolveJdk, shellEnvironment } from '../dist/jdk.js';
 
 const execute = promisify(execFile);
 

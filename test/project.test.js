@@ -4,7 +4,7 @@ import { mkdtemp, readFile, writeFile, rm, chmod, lstat, rename, symlink } from 
 import path from 'node:path';
 import os from 'node:os';
 import { XMLParser } from 'fast-xml-parser';
-import { parseDependency, renderPom, validateManifest, syncPom, saveProject, readProject, inspectPom } from '../src/project.js';
+import { parseDependency, renderPom, validateManifest, syncPom, saveProject, readProject, inspectPom } from '../dist/project.js';
 
 const project = () => ({ name: 'my-app', version: '0.0.1-SNAPSHOT', description: 'A & B <demo>', java: {
   version: '21', springBoot: '4.1.2', groupId: 'com.example', artifactId: 'my-app', packageName: 'com.example.myapp',
@@ -110,4 +110,14 @@ test('dependency writes reject symlinked manifests and POMs without changing the
     await rm(file);
     await rename(target, file);
   }
+});
+
+test('manifest validation rejects values that only stringify to a Java version', () => {
+  const manifest = project();
+  manifest.java.version = [21];
+  assert.throws(() => validateManifest(manifest), /java.version/);
+  manifest.java.version = 21;
+  assert.equal(validateManifest(manifest), manifest);
+  manifest.description = {};
+  assert.throws(() => validateManifest(manifest), /description must be a string/);
 });

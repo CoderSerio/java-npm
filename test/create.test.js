@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import test from 'node:test';
 import * as tar from 'tar';
-import { createProject } from '../src/create.js';
+import { createProject } from '../dist/create.js';
 
 const metadata = {
   bootVersion: { default: '4.1.2', values: [{ id: '4.1.2' }] },
@@ -81,18 +81,14 @@ test('create preserves official dependencies and wrappers and supplies a runnabl
   assert.equal(requests[1].url.searchParams.get('dependencies'), 'web,devtools');
   assert.equal(requests[1].url.searchParams.get('bootVersion'), '4.1.2');
   assert.equal((JSON.parse(await readFile(path.join(directory, 'package.json'), 'utf8'))).scripts.postinstall, undefined);
-  assert.match(manifest.devDependencies['java-npm'], /^file:vendor\/java-npm-[\w.+-]+\.tgz$/);
-  assert.equal(manifest.devDependencies['create-jpm'], undefined);
-  const bundledCli = path.join(directory, manifest.devDependencies['java-npm'].slice('file:'.length));
-  const packedFiles = [];
-  await tar.t({ file: bundledCli, onReadEntry: entry => packedFiles.push(entry.path) });
-  assert.ok(packedFiles.includes('package/bin/jpm.js'));
-  assert.ok(packedFiles.includes('package/src/config.js'));
+  assert.equal(manifest.devDependencies, undefined);
+  for (const entry of ['vendor', 'node_modules', 'package-lock.json']) {
+    assert.ok(!(await readdir(directory)).includes(entry), entry);
+  }
   const sourceDirectory = fileURLToPath(new URL('../', import.meta.url));
   assert.ok(!JSON.stringify(manifest).includes(sourceDirectory));
-  assert.match(await readFile(path.join(directory, '.gitignore'), 'utf8'), /!vendor\/java-npm-.*\.tgz/);
   const readme = await readFile(path.join(directory, 'README.md'), 'utf8');
-  assert.match(readme, /relative dependency survives moving/);
+  assert.match(readme, /npm install --global java-npm@alpha/);
   assert.ok(!readme.includes(sourceDirectory));
   assert.match(await readFile(path.join(directory, 'pom.xml'), 'utf8'), /spring-boot-starter-webmvc-test/);
   assert.match(await readFile(path.join(directory, 'src/main/java/com/example/demo/HelloController.java'), 'utf8'), /Hello from jpm!/);
@@ -162,4 +158,14 @@ test('create rejects decompression bombs and unsupported POM configuration', asy
   mockInitializr(t, await archive(t, { xml: pom.replace('</project>', '<dependencyManagement><dependencies/></dependencyManagement></project>') }));
   await assert.rejects(createProject('demo', { cwd }), /unsupported configuration/);
   assert.deepEqual(await readdir(cwd), []);
+});
+
+test('create reports malformed Initializr metadata without creating a project', async t => {
+  const cwd = await workspace(t);
+  for (const value of [null, { bootVersion: { values: {} }, javaVersion: { values: [] } }]) {
+    t.mock.method(globalThis, 'fetch', async () => Response.json(value));
+    await assert.rejects(createProject('demo', { cwd }), /invalid version metadata/);
+    assert.deepEqual(await readdir(cwd), []);
+    t.mock.restoreAll();
+  }
 });

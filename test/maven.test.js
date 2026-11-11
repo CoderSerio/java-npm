@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { runMaven, runDev } from '../src/maven.js';
+import { runMaven, runDev } from '../dist/maven.js';
 
 async function fixture(t, body) {
   const cwd = await mkdtemp(path.join(os.tmpdir(), 'jpm-maven-test-'));

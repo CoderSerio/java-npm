@@ -6,12 +6,12 @@
 
 ## 快速开始
 
-要求 Node.js 22+，支持 macOS / Linux。默认使用 Java 21；无需预装 Maven。
+要求 Node.js 26+，支持 macOS / Linux。默认使用 Java 21；无需预装 Maven。
 
-包名为 `java-npm`，安装后的命令为 `jpm`。当前首版尚未发布，保持 `private: true`；拿到本地压缩包后，一次性安装 CLI：
+包名为 `java-npm`，安装后的命令为 `jpm`。alpha 安装方式如下（首次发布完成后可用）：
 
 ```sh
-npm install --global ./java-npm-0.1.0.tgz
+npm install --global java-npm@alpha
 jpm --version
 ```
 
@@ -57,9 +57,9 @@ Created /your/workspace/hello-spring
 
 创建只生成文件，不自动安装依赖或启动应用。当前没有模板菜单、依赖勾选或 JDK 安装确认框。`jpm install` 会显示 Maven 下载和解析日志；`jpm dev` 会显示 Maven / Spring Boot 启动日志。缺少 JDK 时给出安装命令，需要用户执行后重试；服务启动后需要手动打开浏览器。
 
-生成项目携带 `vendor/java-npm-0.1.0.tgz`。把归档与项目一起提交后，同事可在项目根目录执行 `npm install --global ./vendor/java-npm-0.1.0.tgz` 一次安装相同的 CLI，再使用 jpm 工作，不依赖原始 CLI 源码目录。首次安装工具仍可能下载它的 npm 依赖，首次解析 Java 依赖也可能访问 Maven 仓库；携带归档不代表全部依赖已离线备齐。
+jpm 通过 npm 单独安装和升级。生成的 Java 项目不携带 CLI 压缩包，也不声明 jpm 的 npm 依赖；共享项目后，同事安装 jpm 即可使用。首次解析 Java 依赖仍需访问 Maven 仓库。
 
-模板保留 `devDependencies.java-npm` 的相对归档引用和可选 npm 脚本别名，供已有 npm 工作流使用；jpm 主流程不依赖这些入口，也不生成 `postinstall` 钩子。
+模板保留可选 npm 脚本别名，供已有 npm 工作流使用；这些别名调用 PATH 中的 jpm，主流程不依赖它们，也不生成 `postinstall` 钩子。
 
 ## 日常命令
 
@@ -196,13 +196,15 @@ JDK 检测覆盖 `JAVA_HOME`、jpm 本地缓存、SDKMAN 安装、macOS / Linux 
 以下 npm 命令只用于开发、检查和打包 jpm 工具本身：
 
 ```sh
+nvm use
 npm ci
 npm run check
-mkdir -p dist
-npm pack --ignore-scripts --pack-destination dist
+npm pack
 ```
 
-从源码试用时，也可以在当前终端定义别名后使用相同的 jpm 命令：
+工具链固定为 Node 26.13.0 / TypeScript 7.0.2（官方 Go 编译器，命令为 `tsc`）。`npm run build` 将 `src/*.ts` 编译到 `dist/`，测试针对构建产物运行。发布包只携带 JS 和使用文档，不需要用户安装 TypeScript；`npm pack` 自动构建。
+
+完成构建后，也可以在当前终端定义别名后使用相同的 jpm 命令：
 
 ```sh
 alias jpm='node /absolute/path/jpm/bin/jpm.js'
@@ -212,13 +214,23 @@ alias jpm='node /absolute/path/jpm/bin/jpm.js'
 
 测试使用 Node 内置测试框架，覆盖 CLI、JSON/POM 语义与覆盖保护、下载/解压边界、JDK 版本和校验、Maven 参数/退出码及开发循环，以及真实本地 npm 打包和只读诊断。它们使用临时目录和模拟下载，不依赖网络。真实 Spring / JDK 端到端验证记录见 [VALIDATION.md](./VALIDATION.md)。
 
-源文件按实际职责拆分：`cli.js` 处理命令入口，`create.js` 创建工程，`project.js` 管理 JSON/POM，`config.js` 管理 `.jpmrc`，`jdk.js` 管理 JDK，`maven.js` 管理构建与开发进程，`distribution.js` 准备可迁移的 CLI 压缩包，`doctor.js` 聚合只读检查。没有新增类或公共类型接口。仅引入 `fast-xml-parser` 和 `tar` 两个运行时依赖，分别处理 XML 和压缩包。
+源文件按实际职责拆分：`cli.ts` 处理命令入口，`create.ts` 创建工程，`project.ts` 管理 JSON/POM，`config.ts` 管理 `.jpmrc`，`jdk.ts` 管理 JDK，`maven.ts` 管理构建与开发进程，`doctor.ts` 聚合只读检查。使用严格 TypeScript 类型描述项目配置、JDK 和诊断结果；外部输入仍经过运行时校验。仅引入 `fast-xml-parser` 和 `tar` 两个运行时依赖，分别处理 XML 和压缩包。
 
 ## 边界
 
 - 仅支持新建单模块 Spring MVC 应用、Maven、macOS / Linux；Windows、Gradle、数据库和全栈模板留待后续。
-- 尚未发布 npm 包；GitHub 仓库已创建，npm 名称归属仍需在正式发布前确认。
+- 当前为 `0.1.0-alpha.0`，接口和配置仍可能调整；发布使用 `alpha` 标签。
 - Java 依赖和 Maven 插件从项目配置与现有 Maven settings 指定的仓库下载；网络或镜像不可用时会返回 Maven 的失败状态。
 - JDK 安装测试与实际应用启动覆盖范围在验证记录中单独说明。
 
 参考：[Spring Initializr](https://docs.spring.io/initializr/docs/current/reference/html/)、[Maven Wrapper](https://maven.apache.org/tools/wrapper/)、[Spring DevTools](https://docs.spring.io/spring-boot/reference/using/devtools.html)、[Adoptium API](https://api.adoptium.net/)。
+
+## alpha 发布
+
+在 Node 26 下执行 `npm ci`、`npm run check`，再用 `npm pack` 生成归档。从归档安装并验收后，发布同一份文件：
+
+```sh
+npm publish ./java-npm-0.1.0-alpha.0.tgz --tag alpha --access public
+```
+
+发布前需有效的 npm 登录和包名权限。`publishConfig.tag` 默认为 `alpha`；请勿将预览版标记为 `latest`。后续 alpha 使用递增版本，已发布版本不可覆盖。

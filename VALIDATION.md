@@ -1,3 +1,35 @@
+# TypeScript / Node 26 alpha 验证
+
+日期：2026-11-12（Asia/Shanghai）。版本：`0.1.0-alpha.0`。以下是本次本地实测，旧版记录保留在后文。
+
+- 工具链：Node **26.13.0**、npm **12.2.2**、TypeScript **7.0.2**（官方 Go 编译器）、`@types/node` **26.6.6**。
+- 原版基线：Node 22.22.0 下 **57/57** 测试通过。
+- 最终版本：`npm run check` 严格类型检查和 **58/58** 测试通过，无跳过；测试直接导入 `dist/` 构建产物。
+- 删除运行时自打包模块和对应测试，新增发布归档检查；创建测试确认不再生成 vendor、npm 依赖或 node_modules。新增 Java 版本错误类型、Initializr 异常元数据回归；doctor 检查升级为 Node 26。
+- 从实际 `.tgz` 安装到隔离 prefix，使用 `--omit=dev --ignore-scripts`，`jpm --version` 返回 `0.1.0-alpha.0`；无 TypeScript 编译器参与用户安装。
+- 最终安装包在 PATH 只有 Node、没有 npm 的环境中成功调用真实 Initializr 创建项目。
+- Node 22 执行 CLI 退出 1，显示要求 Node 26 的提示。
+
+真实应用使用 **macOS arm64 / Temurin 21.0.10 / Maven 3.10.0 / Spring Boot 4.1.2**。JDK 复用已有 IDE 内置安装，仅通过测试进程环境选择；Maven Wrapper 缓存和依赖仓库位于工作目录，没有修改系统 Java 或 shell 配置。
+
+| 验证 | 结果 |
+| --- | --- |
+| `jpm install` | 在新建的隔离 Maven 缓存中完成在线依赖解析，退出 0 |
+| 最终安装包 `jpm create` | 生成可用项目，无 vendor、devDependencies、node_modules |
+| `jpm doctor --json` | `ok: true` |
+| `jpm build` | 生成可执行 JAR；Spring 上下文和 HTTP 测试 **2/2** 通过 |
+| `jpm dev` | 实际 HTTP 200，返回 `Hello from jpm!` |
+| 编辑 Java Controller | 自动编译、重启，HTTP 响应变为 `Reloaded by alpha!` |
+| 向 CLI 发送 SIGINT | 退出 130，服务端口关闭 |
+
+首次依赖解析使用移除归档功能前的同一迁移版本；随后最终包创建的新项目使用该隔离缓存完成构建和热重载。JDK 在线下载因速度过慢主动停止，不能算作本轮安装成功验证；安装校验及失败清理由自动化测试覆盖。
+
+GitHub Actions 配置为 macOS / Ubuntu + Node 26.13.0，执行类型检查、测试、归档安装和 CLI 冒烟检查；远程执行结果见仓库 Actions。本地实测不代表所有平台验收。
+
+发布目标为 npm `alpha` 标签；本记录不表示已经发布，发布结果应以 npm registry 为准。
+
+---
+
 # jpm 0.1 验证记录
 
 日期：2026-11-11（Asia/Shanghai）。当前交付为可用压缩包分发的预览版，包名 `java-npm`、命令 `jpm`；个人 GitHub 仓库为 [CoderSerio/java-npm](https://github.com/CoderSerio/java-npm)，尚未发布 npm 包。
