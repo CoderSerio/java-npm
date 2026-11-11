@@ -20,7 +20,9 @@ test('release archive contains built modules and no source, tests, or compiler',
   const archive = path.join(directory, `java-npm-${metadata.version}.tgz`);
   const entries = [];
   await tar.t({ file: archive, strict: true, onReadEntry: entry => entries.push(entry.path) });
-  for (const required of ['package/package.json', 'package/bin/jpm.js', 'package/dist/cli.js', 'package/dist/config.js']) {
+  for (const required of ['package/package.json', 'package/bin/jpm.js', 'package/dist/cli.js', 'package/dist/config.js',
+    'package/LICENSE', 'package/README.md', 'package/README.zh-CN.md', 'package/docs/cli.md',
+    'package/assets/brand/jpm-readme.png']) {
     assert.ok(entries.includes(required), required);
   }
   assert.ok(entries.every(entry => entry.startsWith('package/') && !entry.includes('..')));
@@ -35,5 +37,6 @@ test('release archive contains built modules and no source, tests, or compiler',
   assert.equal(manifest.private, undefined);
   assert.deepEqual(manifest.publishConfig, { access: 'public', tag: 'alpha' });
   assert.equal(manifest.engines.node, '>=26');
+  assert.equal(manifest.license, 'MIT');
   assert.ok(Object.values(manifest.dependencies).every(specifier => !specifier.startsWith('file:')));
 });

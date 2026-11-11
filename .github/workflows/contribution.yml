@@ -1,0 +1,30 @@
+name: Contribution policy
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+permissions:
+  contents: read
+jobs:
+  contribution-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check branch name and PR title
+        env:
+          HEAD_BRANCH: ${{ github.head_ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          node --input-type=module <<'NODE'
+          const types = '(?:feat|fix|docs|test|refactor|perf|build|ci|chore|revert|release)';
+          const branch = new RegExp(`^${types}/[a-z0-9]+(?:-[a-z0-9]+)*$`);
+          const title = new RegExp(`^${types}(?:\\([a-z0-9][a-z0-9/-]*\\))?!?: \\S[^\\r\\n]*$`);
+          let valid = true;
+          if (!branch.test(process.env.HEAD_BRANCH ?? '')) {
+            console.error('Use a semantic branch such as feat/jdk-selection or docs/quick-start.');
+            valid = false;
+          }
+          if (!title.test(process.env.PR_TITLE ?? '')) {
+            console.error('Use a PR title such as fix: preserve dependency scope or feat(cli): add diagnostics.');
+            valid = false;
+          }
+          if (!valid) process.exitCode = 1;
+          NODE

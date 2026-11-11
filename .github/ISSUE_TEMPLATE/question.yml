@@ -1,0 +1,17 @@
+name: Usage question / 使用问题
+description: Ask about a supported command or configuration.
+title: "question: "
+labels: [question]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Goal and question / 目标与问题
+      description: Explain what you want to achieve and which docs you have tried.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Relevant context / 相关环境
+      description: jpm version, OS, command, and redacted configuration. Never share credentials.

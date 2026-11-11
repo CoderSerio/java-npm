@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security report / 私密安全报告
+    url: mailto:carbon1024@foxmail.com
+    about: Report vulnerabilities privately instead of opening an issue.
+  - name: Documentation / 文档
+    url: https://github.com/CoderSerio/java-npm/tree/main/docs
+    about: Read the CLI, configuration, and troubleshooting guides.

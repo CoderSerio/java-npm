@@ -1,0 +1,24 @@
+name: Feature proposal / 功能建议
+description: Explain a workflow and discuss a focused improvement.
+title: "feat: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or workflow / 问题与场景
+      description: Who encounters this, and what is difficult today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior / 建议行为
+      description: A concrete example command or configuration is helpful.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives and tradeoffs / 替代方案与取舍
+      description: Current workaround, scope, and compatibility concerns, if known.

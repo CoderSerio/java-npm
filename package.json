@@ -20,7 +20,16 @@
   "files": [
     "bin",
     "dist",
-    "README.md"
+    "README.md",
+    "README.zh-CN.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "CODE_OF_CONDUCT.md",
+    "SECURITY.md",
+    "VALIDATION.md",
+    "docs",
+    "assets/brand"
   ],
   "dependencies": {
     "fast-xml-parser": "^5.12.0",
@@ -40,5 +49,20 @@
   "publishConfig": {
     "access": "public",
     "tag": "alpha"
-  }
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Carbon",
+    "email": "carbon1024@foxmail.com",
+    "url": "https://github.com/CoderSerio"
+  },
+  "homepage": "https://github.com/CoderSerio/java-npm#readme",
+  "keywords": [
+    "java",
+    "spring-boot",
+    "maven",
+    "jdk",
+    "cli",
+    "package-manager"
+  ]
 }
