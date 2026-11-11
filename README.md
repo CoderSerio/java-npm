@@ -1,5 +1,9 @@
 <p align="center">
-  <img src="assets/brand/jpm-readme.png" alt="jpm" width="360">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/jpm-readme-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="assets/brand/jpm-readme.png">
+    <img src="assets/brand/jpm-readme.png" alt="jpm" width="360">
+  </picture>
 </p>
 
 <p align="center"><strong>An npm-style workflow for Java and Spring Boot.</strong></p>
