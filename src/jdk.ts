@@ -21,6 +21,8 @@ interface JdkOptions {
   env?: NodeJS.ProcessEnv;
   cacheRoot?: string;
   arch?: string;
+  /** Override OS installation roots for isolated discovery (defaults to platform paths). */
+  systemRoots?: readonly string[];
   fetch?: typeof globalThis.fetch;
 }
 
@@ -91,9 +93,10 @@ async function candidateHomes(options: JdkOptions, major?: number) {
   const candidates = [env.JAVA_HOME];
   if (major !== undefined) candidates.push(path.join(cacheRoot, String(major)));
   const sdkman = path.join(env.SDKMAN_CANDIDATES_DIR ?? path.join(homeDir, '.sdkman', 'candidates'), 'java');
-  const directories = [sdkman, ...(platform === 'darwin'
+  const systemRoots = options.systemRoots ?? (platform === 'darwin'
     ? ['/Library/Java/JavaVirtualMachines', path.join(homeDir, 'Library', 'Java', 'JavaVirtualMachines'), '/System/Library/Java/JavaVirtualMachines']
-    : ['/usr/lib/jvm'])];
+    : ['/usr/lib/jvm']);
+  const directories = [sdkman, ...systemRoots];
   if (major === undefined) directories.unshift(cacheRoot);
   for (const directory of directories) {
     try {

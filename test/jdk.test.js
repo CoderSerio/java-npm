@@ -14,7 +14,7 @@ const execute = promisify(execFile);
 async function fixture(t) {
   const directory = await realpath(await mkdtemp(path.join(tmpdir(), 'jpm-jdk-test-')));
   t.after(() => rm(directory, { recursive: true, force: true }));
-  return { directory, options: { homeDir: directory, cacheRoot: path.join(directory, 'cache'), platform: 'linux', arch: 'x64', env: { PATH: '' } } };
+  return { directory, options: { homeDir: directory, cacheRoot: path.join(directory, 'cache'), platform: 'linux', systemRoots: [], arch: 'x64', env: { PATH: '' } } };
 }
 
 async function fakeJdk(home, version, { javacVersion = version, compiler = true } = {}) {
@@ -220,4 +220,17 @@ test('rejects links that would escape the JDK after its directory is moved', asy
   await pack({ gzip: true, file: archivePath, cwd: source }, ['jdk-21']);
   await assert.rejects(installJdk(21, { ...options, fetch: mockDownload(await readFile(archivePath)) }), /unsafe/);
   assert.deepEqual(await readdir(options.cacheRoot), []);
+});
+
+test('discovers system-root JDKs before falling back to PATH', async t => {
+  const { directory, options } = await fixture(t);
+  const root = path.join(directory, 'system-jvms');
+  const installed = path.join(root, 'jdk-21');
+  const pathHome = path.join(directory, 'path-jdk');
+  await fakeJdk(installed, 21);
+  await fakeJdk(pathHome, 21);
+  const selected = await resolveJdk(21, {
+    ...options, systemRoots: [root], env: { PATH: path.join(pathHome, 'bin') },
+  });
+  assert.equal(selected.home, installed);
 });

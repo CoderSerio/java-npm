@@ -4,7 +4,7 @@
 
 - 工具链：Node **26.13.0**、npm **12.2.2**、TypeScript **7.0.2**（官方 Go 编译器）、`@types/node` **26.6.6**。
 - 原版基线：Node 22.22.0 下 **57/57** 测试通过。
-- 最终版本：`npm run check` 严格类型检查和 **58/58** 测试通过，无跳过；测试直接导入 `dist/` 构建产物。
+- 最终版本：`npm run check` 严格类型检查和 **59/59** 测试通过，无跳过；测试直接导入 `dist/` 构建产物。
 - 删除运行时自打包模块和对应测试，新增发布归档检查；创建测试确认不再生成 vendor、npm 依赖或 node_modules。新增 Java 版本错误类型、Initializr 异常元数据回归；doctor 检查升级为 Node 26。
 - 从实际 `.tgz` 安装到隔离 prefix，使用 `--omit=dev --ignore-scripts`，`jpm --version` 返回 `0.1.0-alpha.0`；无 TypeScript 编译器参与用户安装。
 - 最终安装包在 PATH 只有 Node、没有 npm 的环境中成功调用真实 Initializr 创建项目。
@@ -23,6 +23,8 @@
 | 向 CLI 发送 SIGINT | 退出 130，服务端口关闭 |
 
 首次依赖解析使用移除归档功能前的同一迁移版本；随后最终包创建的新项目使用该隔离缓存完成构建和热重载。JDK 在线下载因速度过慢主动停止，不能算作本轮安装成功验证；安装校验及失败清理由自动化测试覆盖。
+
+首次 Ubuntu CI 发现原有 JDK 测试会扫描 runner 预装的系统 JDK，导致 3 项断言受宿主环境影响。测试现通过内部 `systemRoots` 选项隔离系统目录，并验证系统目录优先于 PATH 的既有行为；CLI 的默认发现路径和优先级不变。
 
 GitHub Actions 配置为 macOS / Ubuntu + Node 26.13.0，执行类型检查、测试、归档安装和 CLI 冒烟检查；远程执行结果见仓库 Actions。本地实测不代表所有平台验收。
 
