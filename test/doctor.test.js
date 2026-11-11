@@ -3,8 +3,8 @@ import { mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, symlink, writeFi
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { inspectDoctor } from '../src/doctor.js';
-import { renderPom } from '../src/project.js';
+import { inspectDoctor } from '../dist/doctor.js';
+import { renderPom } from '../dist/project.js';
 
 async function fixture(t) {
   const directory = await realpath(await mkdtemp(path.join(tmpdir(), 'jpm-doctor-test-')));
@@ -25,7 +25,7 @@ async function fixture(t) {
   // If doctor ever runs Maven, this fixture creates an observable file.
   await writeFile(path.join(cwd, 'mvnw'), `#!${process.execPath}\nrequire('node:fs').writeFileSync('maven-was-run', 'unexpected');\n`, { mode: 0o755 });
   await writeFile(path.join(cwd, '.mvn', 'wrapper', 'maven-wrapper.properties'), 'distributionUrl=https://example.invalid/maven.zip\n');
-  return { cwd, manifest, options: { homeDir, platform: 'linux', nodeVersion: '22.23.4', env: { JAVA_HOME: jdk, PATH: path.join(jdk, 'bin'), SDKMAN_CANDIDATES_DIR: path.join(homeDir, '.sdkman', 'candidates') } } };
+  return { cwd, manifest, options: { homeDir, platform: 'linux', nodeVersion: '26.13.0', env: { JAVA_HOME: jdk, PATH: path.join(jdk, 'bin'), SDKMAN_CANDIDATES_DIR: path.join(homeDir, '.sdkman', 'candidates') } } };
 }
 
 async function snapshot(directory) {
@@ -56,7 +56,7 @@ test('doctor aggregates malformed project/config, unsupported Node, and missing 
   await rm(path.join(cwd, 'mvnw'));
   await rm(path.join(cwd, '.mvn', 'wrapper', 'maven-wrapper.properties'));
   const before = await snapshot(cwd);
-  const result = await inspectDoctor(cwd, { ...options, nodeVersion: '20.19.0' });
+  const result = await inspectDoctor(cwd, { ...options, nodeVersion: '25.0.0' });
   assert.equal(result.ok, false);
   for (const name of ['Node.js', 'Project', 'Java configuration', 'Maven Wrapper']) assert.equal(named(result, name).status, 'error');
   assert.match(named(result, 'Project').action, /jpm doctor/);

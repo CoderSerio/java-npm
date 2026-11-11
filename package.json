@@ -1,27 +1,68 @@
 {
   "name": "java-npm",
-  "version": "0.1.0",
-  "private": true,
+  "version": "0.1.0-alpha.0",
   "description": "A frontend-friendly workflow for Java and Spring Boot",
   "type": "module",
   "bin": {
     "jpm": "bin/jpm.js"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=26"
   },
   "scripts": {
-    "test": "node --test",
-    "check": "node --check bin/jpm.js && node --check bin/create-jpm.js && node --test"
+    "build": "node --input-type=module -e \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run build && node --test test/*.test.js",
+    "check": "npm run typecheck && npm test",
+    "prepack": "npm run build",
+    "prepublishOnly": "npm run check"
   },
   "files": [
     "bin",
-    "src",
+    "dist",
     "README.md",
-    "VALIDATION.md"
+    "README.zh-CN.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "CODE_OF_CONDUCT.md",
+    "SECURITY.md",
+    "VALIDATION.md",
+    "docs",
+    "assets/brand"
   ],
   "dependencies": {
     "fast-xml-parser": "^5.12.0",
     "tar": "^7.5.22"
-  }
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "typescript": "7.0.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CoderSerio/java-npm.git"
+  },
+  "bugs": {
+    "url": "https://github.com/CoderSerio/java-npm/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "alpha"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Carbon",
+    "email": "carbon1024@foxmail.com",
+    "url": "https://github.com/CoderSerio"
+  },
+  "homepage": "https://github.com/CoderSerio/java-npm#readme",
+  "keywords": [
+    "java",
+    "spring-boot",
+    "maven",
+    "jdk",
+    "cli",
+    "package-manager"
+  ]
 }

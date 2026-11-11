@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { runMaven, runDev } from '../src/maven.js';
+import { runMaven, runDev } from '../dist/maven.js';
 
 async function fixture(t, body) {
   const cwd = await mkdtemp(path.join(os.tmpdir(), 'jpm-maven-test-'));
@@ -85,7 +85,7 @@ if (args[0] === 'spring-boot:run') {
   setTimeout(() => {
     fs.mkdirSync('target/classes', { recursive: true });
     fs.writeFileSync('target/classes/Current.class', 'compiled');
-    log({ event: 'compile-end' });
+    log({ event: 'compile-end', completedAt: Date.now() });
   }, 350);
 }
 `);
@@ -105,7 +105,13 @@ if (args[0] === 'spring-boot:run') {
   await rm(path.join(source, 'App.java'));
   await until(async () => (await events(cwd)).filter((e) => e.event === 'compile-end').length === 3);
   await assert.rejects(readFile(path.join(cwd, 'target/classes/Stale.class')), { code: 'ENOENT' });
-  assert.match(await readFile(path.join(cwd, 'target/classes/.jpm-reload'), 'utf8'), /^\d+\n$/);
+  const completedAt = (await events(cwd)).filter((e) => e.event === 'compile-end').at(-1).completedAt;
+  // The fixture logs before the wrapper exits; jpm publishes the trigger afterward.
+  // Wait for this compile's trigger, not a previous value or a partial write.
+  await until(async () => {
+    const trigger = await readFile(path.join(cwd, 'target/classes/.jpm-reload'), 'utf8');
+    return /^\d+\n$/.test(trigger) && Number(trigger) >= completedAt;
+  });
   controller.abort();
   assert.equal(await running, 143);
   const recorded = await events(cwd);

@@ -1,3 +1,4 @@
+import { errorCode, errorMessage, isRecord } from './validation.js';
 import { parseArgs } from 'node:util';
 import { lstat, readFile, realpath } from 'node:fs/promises';
 import { createInterface } from 'node:readline/promises';
@@ -7,10 +8,9 @@ import { resolveJdk, installJdk, listJdks, shellEnvironment } from './jdk.js';
 import { readJavaConfig, writeJavaConfig } from './config.js';
 import { runMaven, runDev, wrapperPath } from './maven.js';
 import { inspectDoctor } from './doctor.js';
-import { readProject, saveProject, syncPom, parseDependency, validateManifest } from './project.js';
+import { readProject, saveProject, syncPom, parseDependency, validateManifest, isScope } from './project.js';
 import path from 'node:path';
 import { homedir } from 'node:os';
-
 
 const help = `jpm — a frontend-friendly Java workflow
 
@@ -34,37 +34,37 @@ const help = `jpm — a frontend-friendly Java workflow
 
 Pass Maven arguments after --, for example jpm build -- -DskipTests.
 .jpmrc selects the JDK; package.json java.version remains the compile target.
-Requires Node.js 22+. The first release supports macOS and Linux.
+Requires Node.js 26+. The first release supports macOS and Linux.
 `;
 
-async function compileTarget(cwd) {
+async function compileTarget(cwd: string) {
   const userDirectory = await realpath(homedir());
   for (let directory = await realpath(cwd); ; directory = path.dirname(directory)) {
     try {
-      const manifest = JSON.parse(await readFile(path.join(directory, 'package.json'), 'utf8'));
-      return manifest?.java ? validateManifest(manifest).java.version : undefined;
+      const manifest: unknown = JSON.parse(await readFile(path.join(directory, 'package.json'), 'utf8'));
+      return isRecord(manifest) && manifest.java ? validateManifest(manifest).java.version : undefined;
     } catch (error) {
-      if (error instanceof SyntaxError) throw new Error(`Invalid package.json in ${directory}: ${error.message}`);
-      if (error.code !== 'ENOENT') throw error;
+      if (error instanceof SyntaxError) throw new Error(`Invalid package.json in ${directory}: ${errorMessage(error)}`);
+      if (errorCode(error) !== 'ENOENT') throw error;
     }
     if (directory === userDirectory || path.dirname(directory) === directory) return undefined;
-    const repository = await lstat(path.join(directory, '.git')).catch(error => { if (error.code !== 'ENOENT') throw error; });
+    const repository = await lstat(path.join(directory, '.git')).catch(error => { if (errorCode(error) !== 'ENOENT') throw error; });
     if (repository) return undefined;
   }
 }
 
-async function configuredJava(cwd, explicit) {
+async function configuredJava(cwd: string, explicit?: string) {
   if (explicit !== undefined) return { version: explicit, source: 'command line' };
   const config = await readJavaConfig(cwd, { fallbackVersion: await compileTarget(cwd) });
   if (!config.version) throw new Error('No Java version is configured. Use jpm jdk use <major> [--global], or supply a version.');
-  return config;
+  return { ...config, version: config.version };
 }
 
-function requireCompatibleJdk(version, target) {
+function requireCompatibleJdk(version: string | number | undefined, target: string | number | undefined) {
   if (target !== undefined && Number(version) < Number(target)) throw new Error(`JDK ${version} cannot build this project's Java ${target} target. Select JDK ${target} or newer in .jpmrc; package.json java.version controls the compile target.`);
 }
 
-async function create(args) {
+async function create(args: string[]) {
   const { values, positionals } = parseArgs({ args, allowPositionals: true, options: {
     java: { type: 'string' }, boot: { type: 'string' }, group: { type: 'string' },
     'package-name': { type: 'string' }, template: { type: 'string' },
@@ -169,7 +169,10 @@ export async function main(args = process.argv.slice(2)) {
     if (positionals.length !== 1) throw new Error('Usage: jpm add <group:artifact[@version]> [--scope test] [--optional]');
     const { coordinate, dependency } = parseDependency(positionals[0]);
     const existing = manifest.java.dependencies[coordinate];
-    if (values.scope) dependency.scope = values.scope;
+    if (values.scope) {
+      if (!isScope(values.scope)) throw new Error(`Unsupported Maven scope: ${values.scope}.`);
+      dependency.scope = values.scope;
+    }
     if (values.optional) dependency.optional = true;
     manifest.java.dependencies[coordinate] = { ...(typeof existing === 'string' ? { version: existing } : existing), ...dependency };
     validateManifest(manifest);
@@ -206,7 +209,9 @@ export async function main(args = process.argv.slice(2)) {
     if (!Object.hasOwn(manifest.java.dependencies, 'org.springframework.boot:spring-boot-devtools')) throw new Error('jpm dev requires org.springframework.boot:spring-boot-devtools. Add it with jpm add org.springframework.boot:spring-boot-devtools --optional.');
     return runDev(cwd, { env: jdk.env, args: forwarded });
   }
-  const goal = { install: 'dependency:go-offline', tree: 'dependency:tree', build: 'package', test: 'test' }[command];
+  const goals: Record<string, string> = { install: 'dependency:go-offline', tree: 'dependency:tree', build: 'package', test: 'test' };
+  const goal = goals[command];
+  if (!goal) throw new Error(`Unknown Maven command: ${command}.`);
   let code;
   try { code = await runMaven(cwd, [goal, ...forwarded], { env: jdk.env }); }
   finally {
@@ -215,10 +220,10 @@ export async function main(args = process.argv.slice(2)) {
   return code;
 }
 
-export async function entry(args) {
+export async function entry(args: string[]) {
   try { process.exitCode = await main(args); }
   catch (error) {
-    console.error(`jpm: ${error.message}`);
+    console.error(`jpm: ${errorMessage(error)}`);
     process.exitCode = 1;
   }
 }

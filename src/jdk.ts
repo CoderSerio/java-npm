@@ -1,3 +1,4 @@
+import { errorCode, isRecord } from './validation.js';
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createWriteStream } from 'node:fs';
@@ -9,17 +10,33 @@ import { pipeline } from 'node:stream/promises';
 import { promisify } from 'node:util';
 import { x as extract } from 'tar';
 
+export interface Jdk {
+  home: string;
+  version: number;
+  env: NodeJS.ProcessEnv;
+}
+interface JdkOptions {
+  platform?: string;
+  homeDir?: string;
+  env?: NodeJS.ProcessEnv;
+  cacheRoot?: string;
+  arch?: string;
+  /** Override OS installation roots for isolated discovery (defaults to platform paths). */
+  systemRoots?: readonly string[];
+  fetch?: typeof globalThis.fetch;
+}
+
 const execute = promisify(execFile);
 const MAX_ARCHIVE_BYTES = 512 * 1024 * 1024;
 
-function majorVersion(version) {
+function majorVersion(version: unknown) {
   if (!/^[1-9]\d*$/.test(String(version)) || !Number.isSafeInteger(Number(version)) || Number(version) < 17) {
     throw new Error('Java version must be a major version of 17 or newer, such as 21.');
   }
   return Number(version);
 }
 
-function settings(options) {
+function settings(options: JdkOptions) {
   const platform = options.platform ?? process.platform;
   if (!['darwin', 'linux'].includes(platform)) {
     throw new Error('jpm 0.1 supports JDK management on macOS and Linux. Windows support is not available yet.');
@@ -28,12 +45,12 @@ function settings(options) {
   return { platform, homeDir, env: options.env ?? process.env, cacheRoot: options.cacheRoot ?? path.join(homeDir, '.jpm', 'jdks') };
 }
 
-async function output(command, args, env) {
+async function output(command: string, args: string[], env: NodeJS.ProcessEnv) {
   const result = await execute(command, args, { env, timeout: 10_000, maxBuffer: 1024 * 1024 });
   return `${result.stdout}\n${result.stderr}`;
 }
 
-function selectedEnvironment(home, env) {
+function selectedEnvironment(home: string, env: NodeJS.ProcessEnv) {
   const bin = path.join(home, 'bin');
   const previousBin = env.JAVA_HOME && path.join(env.JAVA_HOME, 'bin');
   const remaining = (env.PATH ? env.PATH.split(path.delimiter) : []).filter(entry => {
@@ -43,16 +60,16 @@ function selectedEnvironment(home, env) {
   return { ...env, JAVA_HOME: home, PATH: [bin, ...remaining].join(path.delimiter) };
 }
 
-export function shellEnvironment(jdk, env = process.env) {
+export function shellEnvironment(jdk: Pick<Jdk, 'home'>, env = process.env) {
   if (typeof jdk?.home !== 'string' || !path.isAbsolute(jdk.home) || jdk.home.includes('\0') || jdk.home.includes(path.delimiter)) {
     throw new Error('The JDK home must be an absolute path without a NUL or PATH separator.');
   }
   const selected = selectedEnvironment(jdk.home, env);
-  const quote = value => `'${value.replaceAll("'", "'\\''")}'`;
+  const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
   return `export JAVA_HOME=${quote(selected.JAVA_HOME)};\nexport PATH=${quote(selected.PATH)};\n`;
 }
 
-async function inspectHome(candidate, version, env) {
+async function inspectHome(candidate: string, version: number | undefined, env: NodeJS.ProcessEnv): Promise<Jdk | null> {
   for (const home of [candidate, path.join(candidate, 'Contents', 'Home')]) {
     try {
       const java = await output(path.join(home, 'bin', 'java'), ['-XshowSettings:properties', '-version'], env);
@@ -71,14 +88,15 @@ async function inspectHome(candidate, version, env) {
   return null;
 }
 
-async function candidateHomes(options, major) {
+async function candidateHomes(options: JdkOptions, major?: number) {
   const { platform, homeDir, env, cacheRoot } = settings(options);
   const candidates = [env.JAVA_HOME];
   if (major !== undefined) candidates.push(path.join(cacheRoot, String(major)));
   const sdkman = path.join(env.SDKMAN_CANDIDATES_DIR ?? path.join(homeDir, '.sdkman', 'candidates'), 'java');
-  const directories = [sdkman, ...(platform === 'darwin'
+  const systemRoots = options.systemRoots ?? (platform === 'darwin'
     ? ['/Library/Java/JavaVirtualMachines', path.join(homeDir, 'Library', 'Java', 'JavaVirtualMachines'), '/System/Library/Java/JavaVirtualMachines']
-    : ['/usr/lib/jvm'])];
+    : ['/usr/lib/jvm']);
+  const directories = [sdkman, ...systemRoots];
   if (major === undefined) directories.unshift(cacheRoot);
   for (const directory of directories) {
     try {
@@ -86,7 +104,7 @@ async function candidateHomes(options, major) {
       candidates.push(...entries.filter(entry => (entry.isDirectory() || entry.isSymbolicLink())
         && (directory !== cacheRoot || /^\d+$/.test(entry.name))).map(entry => path.join(directory, entry.name)));
     } catch (error) {
-      if (!['ENOENT', 'ENOTDIR', 'EACCES', 'EPERM'].includes(error.code)) throw error;
+      if (!['ENOENT', 'ENOTDIR', 'EACCES', 'EPERM'].includes(errorCode(error))) throw error;
     }
   }
   if (platform === 'darwin') {
@@ -96,12 +114,12 @@ async function candidateHomes(options, major) {
     const java = await output('java', ['-XshowSettings:properties', '-version'], env);
     candidates.push(java.match(/^\s*java\.home\s*=\s*(.+)$/m)?.[1].trim());
   } catch {}
-  return { candidates: [...new Set(candidates.filter(Boolean))], env };
+  return { candidates: [...new Set(candidates.filter((candidate): candidate is string => Boolean(candidate)))], env };
 }
 
-export async function listJdks(options = {}) {
+export async function listJdks(options: JdkOptions = {}) {
   const { candidates, env } = await candidateHomes(options);
-  const installed = new Map();
+  const installed = new Map<string, Jdk>();
   for (const candidate of candidates) {
     const result = await inspectHome(candidate, undefined, env);
     if (result) installed.set(result.home, result);
@@ -109,7 +127,7 @@ export async function listJdks(options = {}) {
   return [...installed.values()].sort((a, b) => a.version - b.version || a.home.localeCompare(b.home));
 }
 
-export async function resolveJdk(version, options = {}) {
+export async function resolveJdk(version: string | number | undefined, options: JdkOptions = {}) {
   const major = majorVersion(version);
   const { env } = settings(options);
   if (env.JAVA_HOME) {
@@ -125,11 +143,11 @@ export async function resolveJdk(version, options = {}) {
   throw new Error(`JDK ${major} was not found. Run "jpm jdk install ${major}", or set JAVA_HOME to a JDK ${major} installation (including javac).`);
 }
 
-async function exists(file) {
-  try { await lstat(file); return true; } catch (error) { if (error.code === 'ENOENT') return false; throw error; }
+async function exists(file: string) {
+  try { await lstat(file); return true; } catch (error) { if (errorCode(error) === 'ENOENT') return false; throw error; }
 }
 
-async function readResponse(response, limit) {
+async function readResponse(response: Response, limit: number) {
   if (!response.ok) throw new Error(`JDK download failed: HTTP ${response.status}.`);
   if (!response.body) throw new Error('JDK download returned an empty response.');
   const chunks = [];
@@ -142,10 +160,11 @@ async function readResponse(response, limit) {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-export async function installJdk(version, options = {}) {
+export async function installJdk(version: string | number, options: JdkOptions = {}) {
   const major = majorVersion(version);
   const { platform, env, cacheRoot } = settings(options);
-  const architecture = { x64: 'x64', arm64: 'aarch64' }[options.arch ?? process.arch];
+  const arch = options.arch ?? process.arch;
+  const architecture = arch === 'x64' ? 'x64' : arch === 'arm64' ? 'aarch64' : undefined;
   if (!architecture) throw new Error('JDK installation supports x64 and arm64 processors.');
   const destination = path.join(cacheRoot, String(major));
   if (await exists(destination)) {
@@ -157,7 +176,7 @@ export async function installJdk(version, options = {}) {
   await mkdir(cacheRoot, { recursive: true });
   const lock = `${destination}.lock`;
   try { await mkdir(lock); } catch (error) {
-    if (error.code === 'EEXIST') throw new Error(`JDK ${major} installation is already in progress. If no installer is running, remove the stale lock directory: ${lock}`);
+    if (errorCode(error) === 'EEXIST') throw new Error(`JDK ${major} installation is already in progress. If no installer is running, remove the stale lock directory: ${lock}`);
     throw error;
   }
   let staging;
@@ -166,12 +185,13 @@ export async function installJdk(version, options = {}) {
     const request = options.fetch ?? globalThis.fetch;
     const query = new URLSearchParams({ architecture, image_type: 'jdk', os: platform === 'darwin' ? 'mac' : 'linux', vendor: 'eclipse', project: 'jdk' });
     const response = await request(`https://api.adoptium.net/v3/assets/latest/${major}/hotspot?${query}`, { signal: AbortSignal.timeout(30_000) });
-    const assets = JSON.parse(await readResponse(response, 2 * 1024 * 1024));
-    const asset = Array.isArray(assets) ? assets.find(item => item.version?.major === major && item.binary?.package) : null;
-    const archive = asset?.binary?.package;
-    if (!archive || !/^[a-f\d]{64}$/i.test(archive.checksum ?? '') || !Number.isSafeInteger(archive.size) || archive.size <= 0 || archive.size > MAX_ARCHIVE_BYTES) {
+    const assets: unknown = JSON.parse(await readResponse(response, 2 * 1024 * 1024));
+    const asset: unknown = Array.isArray(assets) ? assets.find((item: unknown) => isRecord(item) && isRecord(item.version) && item.version.major === major && isRecord(item.binary) && item.binary.package) : null;
+    const archive = isRecord(asset) && isRecord(asset.binary) ? asset.binary.package : undefined;
+    if (!isRecord(archive) || typeof archive.link !== 'string' || typeof archive.checksum !== 'string' || !/^[a-f\d]{64}$/i.test(archive.checksum) || typeof archive.size !== 'number' || !Number.isSafeInteger(archive.size) || archive.size <= 0 || archive.size > MAX_ARCHIVE_BYTES) {
       throw new Error(`Adoptium did not return a valid JDK ${major} archive for this platform.`);
     }
+    const { size: expectedSize, checksum } = archive;
     const url = new URL(archive.link);
     if (url.protocol !== 'https:' || url.hostname !== 'github.com' || !url.pathname.startsWith('/adoptium/')) {
       throw new Error('Adoptium returned an unexpected JDK download URL.');
@@ -185,12 +205,12 @@ export async function installJdk(version, options = {}) {
     await pipeline(Readable.fromWeb(download.body), new Transform({
       transform(chunk, encoding, callback) {
         bytes += chunk.length;
-        if (bytes > archive.size || bytes > MAX_ARCHIVE_BYTES) return callback(new Error('JDK archive exceeded its expected size.'));
+        if (bytes > expectedSize || bytes > MAX_ARCHIVE_BYTES) return callback(new Error('JDK archive exceeded its expected size.'));
         hash.update(chunk);
         callback(null, chunk);
       },
     }), createWriteStream(archivePath, { flags: 'wx', mode: 0o600 }));
-    if (bytes !== archive.size || hash.digest('hex') !== archive.checksum.toLowerCase()) {
+    if (bytes !== expectedSize || hash.digest('hex') !== checksum.toLowerCase()) {
       throw new Error('JDK archive checksum or size verification failed. Nothing was installed.');
     }
     const unpacked = path.join(staging, 'unpacked');
@@ -199,11 +219,13 @@ export async function installJdk(version, options = {}) {
     let unsafeArchive = false;
     await extract({ file: archivePath, cwd: unpacked, strict: true, preserveOwner: false, chmod: true,
       filter(entryPath, entry) {
+        if (!('type' in entry)) return false;
         extractedBytes += entry.size;
-        const link = entry.type === 'SymbolicLink' ? path.posix.join(path.posix.dirname(entryPath), entry.linkpath) : entry.linkpath;
+        const linkpath = entry.linkpath ?? '';
+        const link = entry.type === 'SymbolicLink' ? path.posix.join(path.posix.dirname(entryPath), linkpath) : linkpath;
         if (entryPath.includes('\\') || path.posix.isAbsolute(entryPath) || entryPath.split('/').includes('..')
           || !['File', 'Directory', 'SymbolicLink', 'Link'].includes(entry.type)
-          || (link && (path.posix.isAbsolute(entry.linkpath) || link.includes('\\') || path.posix.normalize(link).split('/').includes('..')
+          || (link && (path.posix.isAbsolute(linkpath) || link.includes('\\') || path.posix.normalize(link).split('/').includes('..')
             || path.posix.normalize(link).split('/')[0] !== path.posix.normalize(entryPath).split('/')[0]))
           || extractedBytes > 2 * 1024 * 1024 * 1024) {
           unsafeArchive = true;

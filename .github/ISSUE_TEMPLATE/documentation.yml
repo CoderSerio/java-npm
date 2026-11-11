@@ -1,0 +1,22 @@
+name: Documentation / 文档反馈
+description: Report missing, inaccurate, or confusing documentation.
+title: "docs: "
+labels: [documentation]
+body:
+  - type: input
+    id: page
+    attributes:
+      label: Page or file / 页面或文件
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What needs to change? / 需要改进什么？
+      description: Quote the relevant passage and explain what was unclear or incorrect.
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested correction / 修改建议

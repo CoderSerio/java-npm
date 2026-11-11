@@ -1,13 +1,21 @@
-import { spawn } from 'node:child_process';
+import { errorCode } from './validation.js';
+import { spawn, type StdioOptions } from 'node:child_process';
 import { access, cp, mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import path from 'node:path';
 import { constants as osConstants } from 'node:os';
 import { setTimeout as delay } from 'node:timers/promises';
 
-const signalCode = (signal) => osConstants.signals[signal] ? 128 + osConstants.signals[signal] : 1;
+interface MavenOptions {
+  env?: NodeJS.ProcessEnv;
+  stdio?: StdioOptions;
+  signal?: AbortSignal;
+  args?: string[];
+}
 
-export async function wrapperPath(cwd) {
+const signalCode = (signal: NodeJS.Signals | null) => signal && osConstants.signals[signal] ? 128 + osConstants.signals[signal] : 1;
+
+export async function wrapperPath(cwd: string) {
   if (process.platform === 'win32') throw new Error('jpm currently supports macOS and Linux. Use WSL on Windows.');
   const wrapper = path.join(cwd, 'mvnw');
   try {
@@ -18,18 +26,18 @@ export async function wrapperPath(cwd) {
   return wrapper;
 }
 
-function spawnMaven(wrapper, cwd, args, options) {
+function spawnMaven(wrapper: string, cwd: string, args: string[], options: MavenOptions) {
   const child = spawn(wrapper, args, {
     cwd, env: options.env ?? process.env, stdio: options.stdio ?? 'inherit', detached: true,
   });
-  let requestedSignal;
-  let forceTimer;
-  const kill = (signal) => {
+  let requestedSignal: NodeJS.Signals | undefined;
+  let forceTimer: NodeJS.Timeout | undefined;
+  const kill = (signal: NodeJS.Signals) => {
     if (!child.pid) return;
     try { process.kill(-child.pid, signal); }
     catch (error) {
-      if (error.code === 'ESRCH') return;
-      if (error.code === 'EPERM' && (child.exitCode !== null || child.signalCode !== null)) return;
+      if (errorCode(error) === 'ESRCH') return;
+      if (errorCode(error) === 'EPERM' && (child.exitCode !== null || child.signalCode !== null)) return;
       throw error;
     }
   };
@@ -37,12 +45,12 @@ function spawnMaven(wrapper, cwd, args, options) {
     if (!child.pid) return false;
     try { process.kill(-child.pid, 0); return true; }
     catch (error) {
-      if (error.code === 'ESRCH') return false;
-      if (error.code === 'EPERM' && (child.exitCode !== null || child.signalCode !== null)) return false;
+      if (errorCode(error) === 'ESRCH') return false;
+      if (errorCode(error) === 'EPERM' && (child.exitCode !== null || child.signalCode !== null)) return false;
       throw error;
     }
   };
-  const done = new Promise((resolve, reject) => {
+  const done = new Promise<number>((resolve, reject) => {
     child.once('error', (error) => { clearTimeout(forceTimer); reject(error); });
     child.once('close', async (code, signal) => {
       clearTimeout(forceTimer);
@@ -58,14 +66,14 @@ function spawnMaven(wrapper, cwd, args, options) {
       } catch (error) { reject(error); }
     });
   });
-  return { done, stop(signal = 'SIGTERM') {
+  return { done, stop(signal: NodeJS.Signals = 'SIGTERM') {
     requestedSignal ??= signal;
     kill(signal);
     forceTimer ??= setTimeout(() => kill('SIGKILL'), 2000);
   } };
 }
 
-function listenForStop(stop, signal) {
+function listenForStop(stop: (signal: NodeJS.Signals) => void, signal?: AbortSignal) {
   const onInt = () => stop('SIGINT');
   const onTerm = () => stop('SIGTERM');
   const onAbort = () => stop('SIGTERM');
@@ -80,7 +88,7 @@ function listenForStop(stop, signal) {
   };
 }
 
-export async function runMaven(cwd, args, options = {}) {
+export async function runMaven(cwd: string, args: string[], options: MavenOptions = {}) {
   const wrapper = await wrapperPath(cwd);
   if (options.signal?.aborted) return 143;
   const job = spawnMaven(wrapper, cwd, args, options);
@@ -89,11 +97,11 @@ export async function runMaven(cwd, args, options = {}) {
   finally { unlisten(); }
 }
 
-async function sourceSnapshot(root) {
+async function sourceSnapshot(root: string): Promise<Map<string, string>> {
   let entries;
   try { entries = await readdir(root, { recursive: true, withFileTypes: true }); }
-  catch (error) { if (error.code === 'ENOENT') return new Map(); throw error; }
-  const snapshot = new Map();
+  catch (error) { if (errorCode(error) === 'ENOENT') return new Map(); throw error; }
+  const snapshot = new Map<string, string>();
   await Promise.all(entries.filter((entry) => entry.isFile()).map(async (entry) => {
     const file = path.join(entry.parentPath, entry.name);
     const relative = path.relative(root, file).replaceAll('\\', '/');
@@ -101,12 +109,12 @@ async function sourceSnapshot(root) {
     try {
       const info = await stat(file, { bigint: true });
       snapshot.set(relative, `${info.mtimeNs}:${info.size}`);
-    } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    } catch (error) { if (errorCode(error) !== 'ENOENT') throw error; }
   }));
   return snapshot;
 }
 
-export async function runDev(cwd, options = {}) {
+export async function runDev(cwd: string, options: MavenOptions = {}) {
   const wrapper = await wrapperPath(cwd);
   if (options.signal?.aborted) return 143;
   const sources = path.join(cwd, 'src', 'main');
@@ -118,8 +126,8 @@ export async function runDev(cwd, options = {}) {
   await mkdir(classes, { recursive: true });
   await writeFile(trigger, 'jpm dev started\n');
 
-  const jobs = new Set();
-  const start = (args) => {
+  const jobs = new Set<ReturnType<typeof spawnMaven>>();
+  const start = (args: string[]) => {
     const job = spawnMaven(wrapper, cwd, args, {
       ...options, env: { ...(options.env ?? process.env), SPRING_DEVTOOLS_RESTART_TRIGGER_FILE: '.jpm-reload' },
     });
@@ -130,11 +138,11 @@ export async function runDev(cwd, options = {}) {
   let stopped = false;
   let dirty = false;
   let clean = false;
-  let timer;
-  let compiling;
-  let fatalError;
-  let poller;
-  const stop = (signal = 'SIGTERM') => {
+  let timer: NodeJS.Timeout | undefined;
+  let compiling: Promise<void> | undefined;
+  let fatalError: unknown;
+  let poller: NodeJS.Timeout | undefined;
+  const stop = (signal: NodeJS.Signals = 'SIGTERM') => {
     stopped = true;
     clearTimeout(timer);
     clearInterval(poller);
@@ -168,7 +176,7 @@ export async function runDev(cwd, options = {}) {
       }
     }
   };
-  const schedule = (needsClean) => {
+  const schedule = (needsClean: boolean) => {
     if (stopped) return;
     dirty = true;
     clean ||= needsClean;
