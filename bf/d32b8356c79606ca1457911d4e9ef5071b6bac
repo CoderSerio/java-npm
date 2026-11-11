@@ -1,0 +1,75 @@
+VALIDATION.md
+  s_0880dd4df40075::t_5cd7a1a8de8571 3
+  s_0880dd4df40075::t_834549731deb4f 1-2
+  s_0880dd4df40075::t_7d1d0ffea19735 4-6
+README.md
+  s_0880dd4df40075::t_5cd7a1a8de8571 5-220
+  s_0880dd4df40075::t_d0d94c2950b23e 2-4
+  s_0880dd4df40075::t_82dc7f0cea5bdd 221-223
+test/maven.test.js
+  s_0880dd4df40075::t_8db76e15f46a70 38,42,66,69,141,144,152-161
+  s_0880dd4df40075::t_f2744314c4f5e7 35-37
+  s_0880dd4df40075::t_4480b118a725cd 39-41
+  s_0880dd4df40075::t_abc84af2a443e9 43-45,63-65
+  s_0880dd4df40075::t_18a0114c5f7fc6 67-68
+  s_0880dd4df40075::t_7ceb74a7013cff 70-72,138-140
+  s_0880dd4df40075::t_3b53bdf5d502a4 142-143
+  s_0880dd4df40075::t_13af43c0024e5a 145-147,149-151
+  s_0880dd4df40075::t_06fecc50bd4144 162-164
+.gitignore
+  s_0880dd4df40075::t_bfa5522a899539 1-4
+bin/create-jpm.js
+  s_0880dd4df40075::t_b97069d3f80d59 1-3
+bin/jpm.js
+  s_0880dd4df40075::t_f243ac6d5699ac 1-3
+package-lock.json
+  s_0880dd4df40075::t_48c9ff77286a63 1-209
+package.json
+  s_0880dd4df40075::t_5e5e9495275fa5 1-27
+src/cli.js
+  s_0880dd4df40075::t_717ff6d23f6d79 1-224
+src/config.js
+  s_0880dd4df40075::t_197fe0ee4e4ff4 1-90
+src/create.js
+  s_0880dd4df40075::t_046d40ed584c7d 1-216
+src/distribution.js
+  s_0880dd4df40075::t_eff51c9fb70069 1-43
+src/doctor.js
+  s_0880dd4df40075::t_35cd21580896ec 1-113
+src/jdk.js
+  s_0880dd4df40075::t_09b93bc00e1a3b 1-229
+src/maven.js
+  s_0880dd4df40075::t_b37cf4dbba6136 1-209
+src/project.js
+  s_0880dd4df40075::t_968c8c14741978 1-151
+test/cli.test.js
+  s_0880dd4df40075::t_3db8dab1042c75 1-202
+test/config.test.js
+  s_0880dd4df40075::t_c0534ad17b2604 1-135
+test/create.test.js
+  s_0880dd4df40075::t_7b264475616b15 1-165
+test/distribution.test.js
+  s_0880dd4df40075::t_addeb43750b717 1-46
+test/doctor.test.js
+  s_0880dd4df40075::t_3a0d509ccbeead 1-110
+test/jdk.test.js
+  s_0880dd4df40075::t_d9a1bffaf55c92 1-223
+test/project.test.js
+  s_0880dd4df40075::t_592d5bb041a6b0 1-113
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "bfd32b8356c79606ca1457911d4e9ef5071b6bac",
+  "prompts": {},
+  "sessions": {
+    "s_0880dd4df40075": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c9f3-fd3d-7d32-96a6-4a0bc6a1b3c8",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "CoderSerio <79406469+CoderSerio@users.noreply.github.com>"
+    }
+  }
+}
