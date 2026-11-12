@@ -67,7 +67,7 @@ export async function inspectDoctor(cwd: string, options: DoctorOptions = {}) {
   if (manifest && configuration?.version) {
     const compatible = Number(configuration.version) >= Number(manifest.java.version);
     add('Compile target', compatible ? 'ok' : 'error', `Java ${manifest.java.version} target, JDK ${configuration.version} selected.`,
-      compatible ? undefined : `Run jpm jdk use ${manifest.java.version} (or a newer installed JDK).`);
+      compatible ? undefined : `Run jpm jdk use ${manifest.java.version} (or a newer JDK).`);
   }
 
   if (configuration?.version && supportedPlatform) {
