@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
+import childProcess, { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { syncBuiltinESMExports } from 'node:module';
 import { chmod, mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { promisify } from 'node:util';
 import { c as pack } from 'tar';
-import { installJdk, listJdks, resolveJdk, shellEnvironment } from '../dist/jdk.js';
+import { installJdk, listJdks, listRemoteJdks, resolveJdk, shellEnvironment } from '../dist/jdk.js';
 
 const execute = promisify(execFile);
 
@@ -17,9 +18,9 @@ async function fixture(t) {
   return { directory, options: { homeDir: directory, cacheRoot: path.join(directory, 'cache'), platform: 'linux', systemRoots: [], arch: 'x64', env: { PATH: '' } } };
 }
 
-async function fakeJdk(home, version, { javacVersion = version, compiler = true } = {}) {
+async function fakeJdk(home, version, { javacVersion = version, compiler = true, vendor = 'Example', runtimeVersion = `${version}.0.1+1`, architecture = 'amd64' } = {}) {
   await mkdir(path.join(home, 'bin'), { recursive: true });
-  await writeFile(path.join(home, 'bin', 'java'), `#!${process.execPath}\nconsole.error('    java.specification.version = ${version}');\nconsole.error('    java.home = ' + require('node:path').resolve(__dirname, '..'));\nconsole.error('openjdk version "${version}.0.1"');\n`);
+  await writeFile(path.join(home, 'bin', 'java'), `#!${process.execPath}\nconsole.error('    java.specification.version = ${version}');\nconsole.error('    java.home = ' + require('node:path').resolve(__dirname, '..'));\nconsole.error(${JSON.stringify(`    java.vendor = ${vendor}`)});\nconsole.error(${JSON.stringify(`    java.runtime.version = ${runtimeVersion}`)});\nconsole.error(${JSON.stringify(`    os.arch = ${architecture}`)});\nconsole.error('openjdk version "${version}.0.1"');\n`);
   await chmod(path.join(home, 'bin', 'java'), 0o755);
   if (compiler) {
     await writeFile(path.join(home, 'bin', 'javac'), `#!${process.execPath}\nconsole.log('javac ${javacVersion}.0.1');\n`);
@@ -32,10 +33,13 @@ function mockDownload(data, checksum = createHash('sha256').update(data).digest(
   return async url => {
     calls++;
     if (calls === 1) {
-      assert.equal(new URL(url).hostname, 'api.adoptium.net');
-      return new Response(JSON.stringify([{ version: { major: 21 }, binary: { package: {
-        checksum, size: data.length, link: 'https://github.com/adoptium/temurin21-binaries/releases/download/test/jdk.tar.gz',
-      } } }]));
+      const request = new URL(url);
+      assert.equal(request.hostname, 'api.adoptium.net');
+      assert.equal(request.pathname, '/v3/assets/feature_releases/21/ga');
+      assert.equal(request.searchParams.get('page_size'), '1');
+      const release = remoteRelease(21);
+      Object.assign(release.binaries[0].package, { checksum, size: data.length });
+      return Response.json([release]);
     }
     assert.equal(new URL(url).hostname, 'github.com');
     return new Response(data);
@@ -47,7 +51,8 @@ test('selects the requested JDK and changes only the returned environment', asyn
   const home = path.join(directory, 'jdk-21');
   await fakeJdk(home, 21);
   const env = { JAVA_HOME: home, PATH: '/example', KEEP: 'value' };
-  const selected = await resolveJdk('21', { ...options, env });
+  const selected = await resolveJdk('21', { ...options, env, installIfMissing: true,
+    onInstall: () => assert.fail('installed JDK must be reused'), fetch: () => assert.fail('must not download') });
   assert.equal(selected.version, 21);
   assert.equal(selected.home, home);
   assert.equal(selected.env.JAVA_HOME, home);
@@ -167,7 +172,10 @@ test('rejects a JRE and a compiler with a different major version', async t => {
 });
 
 test('rejects invalid version paths and unsupported platforms before downloading', async () => {
-  await assert.rejects(resolveJdk('../21'), /major version/);
+  const options = { installIfMissing: true, onInstall: () => assert.fail('invalid request must not install'), fetch: () => assert.fail('must not download') };
+  await assert.rejects(resolveJdk('../21', options), /major version/);
+  await assert.rejects(resolveJdk(100, options), /major version/);
+  await assert.rejects(resolveJdk(21, { ...options, platform: 'win32' }), /Windows support/);
   await assert.rejects(installJdk('21.0.1'), /major version/);
   await assert.rejects(installJdk(21, { platform: 'win32' }), /Windows support/);
 });
@@ -178,17 +186,119 @@ test('checksum failure leaves no installation or staging files', async t => {
   assert.deepEqual(await readdir(options.cacheRoot), []);
 });
 
-test('installs a verified archive and reuses it without another download', async t => {
+test('installs a missing JDK only when requested and reuses its verified archive', async t => {
   const { directory, options } = await fixture(t);
   const source = path.join(directory, 'source');
   await fakeJdk(path.join(source, 'jdk-21'), 21);
   const archivePath = path.join(directory, 'jdk.tar.gz');
   await pack({ gzip: true, file: archivePath, cwd: source }, ['jdk-21']);
   const data = await readFile(archivePath);
-  const installed = await installJdk(21, { ...options, fetch: mockDownload(data) });
+  await assert.rejects(resolveJdk(21, { ...options, fetch: () => assert.fail('default resolution must not download') }), /was not found/);
+  let installations = 0;
+  const originalExecFile = childProcess.execFile;
+  const probeTimeouts = [];
+  const firstLaunch = (...args) => originalExecFile(...args);
+  firstLaunch[promisify.custom] = async (command, args, executionOptions) => {
+    if (command.includes(`${path.sep}.install-`) || (probeTimeouts.length && command.startsWith(`${options.cacheRoot}${path.sep}21${path.sep}`))) {
+      probeTimeouts.push(executionOptions.timeout);
+      if (executionOptions.timeout < 41_111) throw Object.assign(new Error('First launch exceeded its deadline'), { killed: true, signal: 'SIGTERM' });
+    } else assert.equal(executionOptions.timeout, 10_000);
+    return execute(command, args, executionOptions);
+  };
+  let installed;
+  try {
+    childProcess.execFile = firstLaunch;
+    syncBuiltinESMExports();
+    const freshModule = await import('../dist/jdk.js?slow-first-launch');
+    installed = await freshModule.resolveJdk(21, { ...options, installIfMissing: true, onInstall: () => installations++, fetch: mockDownload(data) });
+  } finally {
+    childProcess.execFile = originalExecFile;
+    syncBuiltinESMExports();
+  }
+  assert.deepEqual(probeTimeouts, [60_000, 60_000, 60_000, 60_000]);
+  assert.equal(installations, 1);
   assert.equal(installed.home, path.join(options.cacheRoot, '21'));
   assert.deepEqual(await readdir(options.cacheRoot), ['21']);
   assert.equal((await installJdk(21, { ...options, fetch: () => assert.fail('must not fetch an installed JDK') })).home, installed.home);
+});
+
+test('identifies Temurin and its complete runtime version without mislabeling other vendors', async t => {
+  const { options } = await fixture(t);
+  for (const [major, vendor, runtimeVersion, architecture] of [[21, 'Eclipse Adoptium', '21.0.13+9-LTS', 'aarch64'], [25, 'Azul Systems, Inc.', '25.0.1+1-LTS', 'amd64']]) {
+    await fakeJdk(path.join(options.cacheRoot, String(major)), major, { vendor, runtimeVersion, architecture });
+  }
+  const jdks = await listJdks(options);
+  assert.deepEqual(jdks.map(({ distribution, runtimeVersion, architecture }) => ({ distribution, runtimeVersion, architecture })), [
+    { distribution: 'temurin', runtimeVersion: '21.0.13+9', architecture: 'aarch64' }, { distribution: undefined, runtimeVersion: '25.0.1+1', architecture: 'x64' },
+  ]);
+});
+
+function remoteRelease(major, runtimeVersion = `${major}.0.1+1-LTS`) {
+  return {
+    release_type: 'ga', vendor: 'eclipse', version_data: { major, openjdk_version: runtimeVersion },
+    binaries: [{ os: 'linux', architecture: 'x64', image_type: 'jdk', jvm_impl: 'hotspot', heap_size: 'normal', project: 'jdk',
+      package: { link: `https://github.com/adoptium/temurin${major}-binaries/releases/download/test/jdk.tar.gz`, checksum: 'a'.repeat(64), size: 200_000_000 } }],
+  };
+}
+
+test('summarizes the latest remote GA JDK for each supported major without writing files', async t => {
+  const { directory, options } = await fixture(t);
+  const calls = [];
+  const releases = await listRemoteJdks(undefined, { ...options, fetch: async input => {
+    const url = new URL(input);
+    calls.push(url.pathname);
+    assert.equal(url.hostname, 'api.adoptium.net');
+    if (url.pathname.endsWith('available_releases')) return Response.json({ available_releases: [8, 11, 17, 21, 21, 25, 28] });
+    const major = Number(url.pathname.split('/')[4]);
+    assert.match(url.pathname, /\/ga$/);
+    for (const [key, value] of Object.entries({ page_size: '1', page: '0', os: 'linux', architecture: 'x64', image_type: 'jdk', jvm_impl: 'hotspot', project: 'jdk', vendor: 'eclipse', sort_order: 'DESC', sort_method: 'DEFAULT' })) {
+      assert.equal(url.searchParams.get(key), value);
+    }
+    return major === 28 ? new Response(null, { status: 404 }) : Response.json([remoteRelease(major)]);
+  } });
+  assert.deepEqual(releases, [25, 21, 17].map(version => ({ version, runtimeVersion: `${version}.0.1+1`, distribution: 'temurin', architecture: 'x64' })));
+  assert.equal(calls.length, 5);
+  assert.deepEqual(await readdir(directory), []);
+});
+
+test('paginates a requested major and deduplicates remote builds', async t => {
+  const { options } = await fixture(t);
+  const pages = [];
+  const releases = await listRemoteJdks('21', { ...options, fetch: async input => {
+    const url = new URL(input);
+    assert.equal(url.pathname, '/v3/assets/feature_releases/21/ga');
+    assert.equal(url.searchParams.get('page_size'), '20');
+    const page = Number(url.searchParams.get('page'));
+    pages.push(page);
+    return Response.json(page === 0 ? Array.from({ length: 20 }, (_, index) => remoteRelease(21, index === 0 ? '21.0.21.0.2+1-LTS' : `21.0.${21 - index}+1-LTS`))
+      : [remoteRelease(21, '21.0.2+1-LTS'), remoteRelease(21, '21.0.1+1-LTS'), remoteRelease(21, '21+35-LTS')]);
+  } });
+  assert.deepEqual(pages, [0, 1]);
+  assert.equal(releases.length, 22);
+  assert.equal(releases[0].runtimeVersion, '21.0.21.0.2+1');
+  assert.equal(releases.at(-1).runtimeVersion, '21+35');
+});
+
+test('remote catalog rejects malformed or failed metadata instead of claiming no releases', async t => {
+  const { options } = await fixture(t);
+  const missing = await listRemoteJdks(99, { ...options, fetch: async () => new Response(null, { status: 404 }) });
+  assert.deepEqual(missing, []);
+  await assert.rejects(listRemoteJdks(undefined, { ...options, fetch: async () => Response.json({ available_releases: ['21'] }) }), /invalid available/);
+  await assert.rejects(listRemoteJdks(21, { ...options, fetch: async () => new Response('unavailable', { status: 503 }) }), /HTTP 503/);
+  await assert.rejects(listRemoteJdks(21, { ...options, fetch: async () => Response.json({ releases: [] }) }), /invalid JDK release list/);
+  for (const change of [
+    release => { release.release_type = 'ea'; },
+    release => { release.version_data.openjdk_version = '\u001b[2J'; },
+    release => { release.binaries[0].image_type = 'jre'; },
+    release => { release.binaries[0].package.link = 'https://example.com/jdk.tar.gz'; },
+  ]) {
+    const release = remoteRelease(21);
+    change(release);
+    await assert.rejects(listRemoteJdks(21, { ...options, fetch: async () => Response.json([release]) }), /invalid|unexpected/);
+  }
+  for (const configuration of [{ platform: 'win32' }, { arch: 'ia32' }]) {
+    await assert.rejects(listRemoteJdks(21, { ...options, ...configuration, fetch: () => assert.fail('must not query') }), /Windows support|x64 and arm64/);
+  }
 });
 
 test('does not overwrite an existing incomplete installation', async t => {

@@ -31,13 +31,13 @@ Spring Initializr 提供初始工程，Maven 负责依赖解析和构建。最�
 - **从可运行的应用开始。** 创建包含 HTTP 接口和测试的 Spring MVC 工程。
 - **清晰地声明依赖。** 在 JSON 中维护 Maven 坐标、同步 POM，并保护手工修改不被覆盖。
 - **保存后编译、重启。** `jpm dev` 监听 Java 和资源文件，编译改动，通过 Spring DevTools 重启应用。
-- **按项目选择 Java。** 提交一份 `.jpmrc`，选择已安装的 JDK，用 `jpm doctor` 排查配置问题。
+- **按项目选择 Java。** `jpm jdk use 21` 复用已安装的 JDK，缺少时自动下载，再将选择保存到 `.jpmrc`。用 `jpm doctor` 排查配置问题。
 
 > **Alpha 阶段：** 当前聚焦 macOS 和 Linux 上新建的单模块 Spring MVC 项目，命令与配置可能调整。
 
 ## 快速开始
 
-在 macOS 或 Linux 上准备 **Node.js 26+** 和 **JDK 21**，无需另外安装 Maven。
+在 macOS 或 Linux 上准备 **Node.js 26+**。jpm 可以代为安装 **JDK 21**，无需另外安装 Maven。
 
 <!-- publication-status:start -->
 首个 npm alpha 正在准备中。以下 registry 安装命令在发布后可用；现在可以[从源码构建](CONTRIBUTING.md#development-setup)体验。
@@ -47,15 +47,18 @@ Spring Initializr 提供初始工程，Maven 负责依赖解析和构建。最�
 npm install --global java-npm@alpha
 jpm create my-app --java 21 -y
 cd my-app
+jpm jdk use 21
 jpm install
 jpm dev
 ```
 
 打开 **<http://localhost:8080/>** 查看生成应用的响应。修改 Java Controller 并保存，即可观察开发模式下的自动重启。
 
-还没有 JDK？先执行 `jpm jdk install 21`，再执行 `jpm install`。JDK 下载需要显式触发；创建工程不会安装工具或依赖。首次使用需要联网获取未缓存的资源。
+`jpm jdk use 21` 仅在本地找不到可用的 Java 21 时下载 Temurin。如果只想安装、不改变当前选择，可以执行 `jpm jdk install 21` 或 `jpm jdk i 21`。创建工程不会安装工具或依赖。首次使用需要联网获取未缓存的资源。
 
 npm 包名是 **`java-npm`**，安装后的命令是 **`jpm`**。
+
+直接运行 `jpm` 打开交互欢迎菜单，或运行 `jpm create` 进入项目名称和 Java 版本向导。终端界面采用红蓝配色的咖啡图案；`jpm doctor` 展示环境摘要、检查结果和修复提示。管道和 CI 保持纯文本输出，`NO_COLOR=1` 可关闭颜色。
 
 ## 熟悉的开发循环
 

@@ -74,6 +74,10 @@ Selection order:
 
 Creation has no existing-project fallback and defaults to 21 if no selection is available. Upward project lookup stops at package/repository boundaries or the user home. Running `jdk use` from a subdirectory writes at the nearest applicable project boundary when no nearer rc exists.
 
-The selected JDK runs Maven; `java.version` remains the compilation target. A newer selected JDK can build an older target. A JDK older than that target is rejected before Maven runs. Exact vendor/build selection is not currently supported.
+The selected JDK runs Maven; `java.version` remains the compilation target. A newer selected JDK can build an older target. A JDK older than that target is rejected before Maven runs; local `jdk use` also checks this before attempting a download.
+
+`jpm jdk use 21` first looks for a usable local Java 21, including installations from other distributions. If none is found, it downloads Temurin, verifies the installation, and then saves `java=21`. A failed download leaves the previous selection intact. `jdk install 21` and its alias `jdk i 21` only install; they do not write a selection. Without a version argument, installation uses the configured major version or reports that one is required.
+
+The selection records only a major version, not a specific installation path or distribution. Matching `JAVA_HOME` is preferred during local discovery. Downloads use the latest available Temurin release for that major and reuse an existing complete jpm cache without upgrading it. Remote lists may show full versions, but exact distribution/build selection is not currently supported.
 
 `jdk use` cannot change its parent shell. To change the current bash/zsh environment, use `eval "$(jpm jdk env)"`. No shell startup files or automatic directory hooks are installed.

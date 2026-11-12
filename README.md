@@ -31,13 +31,13 @@ Spring Initializr provides the starting project. Maven handles dependency resolu
 - **Start with a working application.** Generate a Spring MVC project with an HTTP endpoint and tests.
 - **Keep dependencies readable.** Declare Maven coordinates in JSON and synchronize the POM, with protection against overwriting manual edits.
 - **Edit, compile, restart.** `jpm dev` watches Java and resource files, recompiles changes, and restarts the application through Spring DevTools.
-- **Choose Java per project.** Commit a `.jpmrc`, select an installed JDK, and use `jpm doctor` to diagnose configuration problems.
+- **Choose Java per project.** `jpm jdk use 21` reuses an installed JDK or downloads one if needed, then saves the choice in `.jpmrc`. Use `jpm doctor` to diagnose configuration problems.
 
 > **Alpha:** currently focused on new, single-module Spring MVC projects on macOS and Linux. Commands and configuration may change.
 
 ## Quick start
 
-Use **Node.js 26+** and **JDK 21** on macOS or Linux. A separate Maven installation is not required.
+Use **Node.js 26+** on macOS or Linux. jpm can install **JDK 21** for you; a separate Maven installation is not required.
 
 <!-- publication-status:start -->
 The first npm alpha is being prepared. The registry installation below becomes available after publication; you can [build from source](CONTRIBUTING.md#development-setup) now.
@@ -47,15 +47,18 @@ The first npm alpha is being prepared. The registry installation below becomes a
 npm install --global java-npm@alpha
 jpm create my-app --java 21 -y
 cd my-app
+jpm jdk use 21
 jpm install
 jpm dev
 ```
 
 Open **<http://localhost:8080/>** to see the generated application's response. Edit its Java controller and save to see the development restart.
 
-Need a JDK? Run `jpm jdk install 21` before `jpm install`. JDK downloads are explicit; project creation does not install tools or dependencies. Initial setup needs network access for uncached artifacts.
+`jpm jdk use 21` downloads Temurin only when no usable Java 21 is found locally. To install without changing your selection, use `jpm jdk install 21` or `jpm jdk i 21`. Project creation does not install tools or dependencies. Initial setup needs network access for uncached artifacts.
 
 The npm package is **`java-npm`**; the installed command is **`jpm`**.
+
+Run `jpm` without arguments for an interactive welcome menu, or `jpm create` for the project-name and Java-version wizard. The terminal interface uses a red-and-blue coffee mark; `jpm doctor` presents an environment summary and actionable checks. Pipes and CI keep plain output, and `NO_COLOR=1` disables colors.
 
 ## A familiar development loop
 
