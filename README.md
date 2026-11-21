@@ -2,7 +2,7 @@
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/brand/jpm-readme-dark.png">
     <source media="(prefers-color-scheme: light)" srcset="assets/brand/jpm-readme.png">
-    <img src="assets/brand/jpm-readme.png" alt="jpm" width="360">
+    <img src="assets/brand/jpm-readme.png" alt="jpm" width="264">
   </picture>
 </p>
 
@@ -58,7 +58,7 @@ Open **<http://localhost:8080/>** to see the generated application's response. E
 
 The npm package is **`java-npm`**; the installed command is **`jpm`**.
 
-Run `jpm` without arguments for an interactive welcome menu, or `jpm create` for the project-name and Java-version wizard. The terminal interface uses a red-and-blue coffee mark; `jpm doctor` presents an environment summary and actionable checks. Pipes and CI keep plain output, and `NO_COLOR=1` disables colors.
+Run `jpm` without arguments for an interactive welcome menu, or `jpm create` for the project-name and Java-version wizard. The terminal header reads `; jpm`. Run `jpm doctor` for an environment summary and actionable checks. Pipes and CI keep plain output, and `NO_COLOR=1` disables colors.
 
 ## A familiar development loop
 
