@@ -8,7 +8,7 @@ Unless noted otherwise, project commands run from the directory containing the p
 
 Run `jpm` without arguments to open the welcome menu. Outside a valid jpm project, it offers project creation, the command guide, and exit. In a valid project, it also offers development, tests, and diagnostics. Use the arrow keys to move and Enter to select; an action starts only after selection.
 
-The welcome page, creation wizard, and doctor share a coffee mark with red-orange steam and a blue cup. Roomy terminals show the mark beside a thin, rounded frame containing the version, introduction, and environment summary; menus sit below the frame. The default welcome page aligns the right column with the top and bottom of the mark. Small terminals use a compact layout. Solid Unicode half-block characters keep the mark legible without a special font or image download. Text and borders use the terminal's normal foreground instead of bold or dim styling; accents adapt to truecolor, 256-color, or 16-color terminals. The terminal still controls the actual font and theme.
+The welcome page, creation wizard, and doctor use a single-column layout. The header pairs `; jpm` with the version in the terminal’s normal foreground. A blue arrow marks the selected action. Menus show as many choices as the available rows permit and hide the header when space is tight.
 
 Interactive prompts require both input and output to be terminals. Pipes, redirected output, CI, and `TERM=dumb` use plain output without menus or cursor movement. Bare `jpm` shows help in those environments. `NO_COLOR=1` disables colors while retaining terminal interaction. `--help`, `--version`, `--json`, and `jdk env` do not gain a banner or interactive menu.
 

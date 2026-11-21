@@ -71,19 +71,22 @@ test('display metadata cannot inject terminal controls or extra rows', () => {
   assert.doesNotMatch(result, /[\x00-\x1f\x7f-\x9f\u202e]/);
 });
 
-test('a narrow banner stays within terminal columns and never displays control characters from metadata', t => {
+test('the plain-text brand fits both wide and narrow banners and clips long metadata', t => {
   environment(t);
   property(t, stdout, 'isTTY', true);
-  property(t, stdout, 'columns', 28);
-  property(t, stdout, 'rows', 12);
+  property(t, stdout, 'columns', 120);
+  property(t, stdout, 'rows', 30);
   process.env.NO_COLOR = '1';
   const output = [];
   t.mock.method(stdout, 'write', value => { output.push(String(value)); return true; });
-  banner('0.1.0-alpha.0', 'A familiar workflow for Java.', ['Project  ' + 'a'.repeat(100) + '\x1b[2J']);
-  const result = output.join('');
-  assert.ok(result.split('\n').every(line => line.length <= 27));
-  assert.match(result, /…/);
-  assert.doesNotMatch(result, /\x1b|[\u2800-\u28ff]/);
+  for (const columns of [120, 28]) {
+    stdout.columns = columns;
+    banner('0.1.0-alpha.0', 'A familiar workflow for Java.', ['Project  ' + 'a'.repeat(200) + '\x1b[2J']);
+    const rows = output.pop().trimEnd().split('\n');
+    assert.equal(rows[1], '  ; jpm  0.1.0-alpha.0');
+    assert.match(rows.at(-1), /^  Project  a+…$/);
+    assert.ok(rows.every(line => line.length < columns && !line.includes('\x1b')));
+  }
 });
 
 test('menu cancellation restores raw mode, cursor, and listeners', async t => {

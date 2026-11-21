@@ -5,28 +5,6 @@ import { stripVTControlCharacters } from 'node:util';
 type Tone = 'blue' | 'red' | 'text';
 interface Header { version: string; subtitle: string; details?: string[] }
 
-// Solid half blocks avoid the thin, separated dots of font-dependent Braille glyphs.
-const coffee = [
-  '             ▄▄█            ',
-  '           ▄▀▀              ',
-  '           █      ▄▄        ',
-  '           ▀█▄   █          ',
-  '             █▄ ▀█          ',
-  '             █   █          ',
-  '          ▄█▀   ▄▀          ',
-  '         █                  ',
-  '         ▀▀████             ',
-  '   ▄█▀▀▀▀         ▀▀█▄      ',
-  '   ▀▀██▄▄▄▄▄▄▄▄▄▄▄▄█▀▀▄▄▄▄▄ ',
-  '     ██            ▄█     ██',
-  '     ▀█            █▀    ▄▀ ',
-  '      ▀█▄▄▄▄▄▄▄▄▄▄█▀ ▄█▀▀   ',
-  '    ▄▄▄  ▀▀▀▀▀▀▀▀           ',
-  ' ▄▀▀▀▀▀                 ▀█▄ ',
-  ' ▀▀██▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄██▀▀▀  ',
-  '       ▄▄▄▄▄▄▄▄▄▄▄▄▄▄█▀▀    ',
-];
-
 export function terminalOutput() {
   return Boolean(stdout.isTTY && process.env.TERM !== 'dumb' && !process.env.CI);
 }
@@ -52,7 +30,7 @@ export function cleanText(text: string) {
 function cellWidth(character: string) {
   if (/[\p{Mark}\u200d\ufe0e\ufe0f]/u.test(character)) return 0;
   const point = character.codePointAt(0)!;
-  // Count wide scripts/emoji conservatively; Block elements and the menu's symbols are single cells.
+  // Count wide scripts/emoji conservatively; the menu's symbols are single cells.
   return point >= 0x1100 && !(point >= 0x2000 && point < 0x3000) ? 2 : 1;
 }
 
@@ -75,41 +53,18 @@ function clipped(text: string, width: number) {
   return result;
 }
 
-function lines(header: Header | undefined, body: { text: string; tone?: Tone }[] = [], compact = false) {
+function lines(header: Header | undefined, body: { text: string; tone?: Tone }[] = []) {
   const columns = Math.max(4, stdout.columns || 80);
   const heading = header ? [
-    { text: `jpm  ${header.version}`, tone: 'text' as const },
+    { text: `; jpm  ${header.version}`, tone: 'text' as const },
     { text: header.subtitle, tone: 'text' as const },
     { text: '' },
     ...(header.details ?? []).map(text => ({ text })),
   ] : [];
   const content = [...heading, ...(heading.length && body.length ? [{ text: '' }] : []), ...body];
-  const gap = body.length ? Math.max(1, coffee.length - heading.length - 4 - body.length) : 0;
-  const framedHeight = heading.length + 4 + gap + body.length;
-  const wide = header && !compact && columns >= 80 && (stdout.rows || 24) >= Math.max(coffee.length, framedHeight) + 2;
-  if (!wide) return content.map(line => {
+  return content.map(line => {
     const text = clipped(line.text, columns - 3);
     return '  ' + (line.tone ? color(text, line.tone) : text);
-  });
-  const width = (text: string) => [...cleanText(text)].reduce((total, character) => total + cellWidth(character), 0);
-  const frameWidth = Math.min(columns - 36, 56, Math.max(38, ...heading.map(line => width(line.text) + 4)));
-  const framed = (text: string) => {
-    const inside = clipped(text, frameWidth - 4);
-    return { text: `│ ${inside}${' '.repeat(frameWidth - 4 - width(inside))} │`, tone: 'text' as const };
-  };
-  const right: { text: string; tone?: Tone }[] = [
-    { text: `╭${'─'.repeat(frameWidth - 2)}╮`, tone: 'text' as const },
-    framed(''), ...heading.map(line => framed(line.text)), framed(''),
-    { text: `╰${'─'.repeat(frameWidth - 2)}╯`, tone: 'text' as const },
-    ...Array.from({ length: gap }, () => ({ text: '' })),
-    ...body.map(line => ({ ...line, text: '  ' + clipped(line.text, columns - 38) })),
-  ];
-  return Array.from({ length: Math.max(coffee.length, right.length) }, (_, index) => {
-    const art = coffee[index] ?? ' '.repeat(28);
-    const painted = color(art, index < 9 ? 'red' : 'blue');
-    const line = right[index];
-    const text = line?.text ?? '';
-    return `  ${painted}     ${line?.tone ? color(text, line.tone) : text}`;
   });
 }
 
@@ -126,7 +81,7 @@ export async function choose(message: string, choices: { label: string; value: s
   if (!interactive()) throw new Error('An interactive terminal is required. Use an explicit jpm command.');
   if (!choices.length) throw new Error('No choices are available.');
   let selected = Math.max(0, Math.min(choices.length - 1, options.initial ?? 0));
-  let printed = 0, compact = false, settled = false;
+  let printed = 0, settled = false;
   const wasRaw = Boolean(stdin.isRaw), wasFlowing = stdin.readableFlowing === true;
   let keypress: (text: string, key: Key) => void = () => {};
   let cancel = (exitCode = 130) => {};
@@ -148,14 +103,14 @@ export async function choose(message: string, choices: { label: string; value: s
       { text: `›  ${choices[selected].label}`, tone: 'blue' },
       ...(budget >= 3 ? [{ text: '↑↓ Move · Enter Select · Ctrl+C Exit', tone: 'text' as const }] : []),
     ];
-    const output = lines(header, body, compact);
+    const output = lines(header, body);
     if (printed) stdout.write(`\x1b[${printed}A\r\x1b[J`);
     stdout.write(output.join('\n') + '\n');
     printed = output.length;
   };
   const resize = () => {
     // A resized terminal may reflow old rows. Leave them in scrollback instead of erasing unrelated text.
-    printed = 0; compact = true;
+    printed = 0;
     stdout.write('\n'); render();
   };
   try {

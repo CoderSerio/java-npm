@@ -2,7 +2,7 @@
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/brand/jpm-readme-dark.png">
     <source media="(prefers-color-scheme: light)" srcset="assets/brand/jpm-readme.png">
-    <img src="assets/brand/jpm-readme.png" alt="jpm" width="360">
+    <img src="assets/brand/jpm-readme.png" alt="jpm" width="264">
   </picture>
 </p>
 
@@ -58,7 +58,7 @@ jpm dev
 
 npm 包名是 **`java-npm`**，安装后的命令是 **`jpm`**。
 
-直接运行 `jpm` 打开交互欢迎菜单，或运行 `jpm create` 进入项目名称和 Java 版本向导。终端界面采用红蓝配色的咖啡图案；`jpm doctor` 展示环境摘要、检查结果和修复提示。管道和 CI 保持纯文本输出，`NO_COLOR=1` 可关闭颜色。
+直接运行 `jpm` 打开交互欢迎菜单，或运行 `jpm create` 进入项目名称和 Java 版本向导。终端页眉显示 `; jpm`。`jpm doctor` 展示环境摘要、检查结果和修复提示。管道和 CI 保持纯文本输出，`NO_COLOR=1` 可关闭颜色。
 
 ## 熟悉的开发循环
 
