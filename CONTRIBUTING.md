@@ -8,7 +8,7 @@ Read the [Code of Conduct](CODE_OF_CONDUCT.md). Report vulnerabilities privately
 
 Search open and closed issues and PRs. For a new command, configuration format, dependency, or substantial behavior change, open a feature proposal first so the design can be discussed. A focused bug fix or documentation correction can go straight to a PR.
 
-The alpha scope is new single-module Spring MVC projects, Maven, macOS/Linux, and Node 26+. See the [roadmap](docs/roadmap.md). Keep unrelated refactors and formatting changes out of a fix.
+The alpha scope is new single-module Spring MVC projects, Maven, macOS/Linux, and Node 22+. See the [roadmap](docs/roadmap.md). Keep unrelated refactors and formatting changes out of a fix.
 
 ## Development setup
 
@@ -23,7 +23,7 @@ npm ci
 npm run check
 ```
 
-Use Node **26.13.0**, recorded in `.node-version` and `.nvmrc`; another version manager is fine. TypeScript **7.0.2** is pinned in devDependencies. `npm run build` emits ESM JavaScript to `dist/`. Do not commit `dist/`, `node_modules/`, generated test projects, or npm archives.
+Develop with Node **26.13.0** (recorded in `.node-version` and `.nvmrc`); the minimum supported runtime is Node **22**, enforced by `engines` and the CI matrix. TypeScript **7.0.2** is pinned in devDependencies. `npm run build` emits ESM JavaScript to `dist/`. Do not commit `dist/`, `node_modules/`, generated test projects, or npm archives.
 
 ```sh
 npm run typecheck

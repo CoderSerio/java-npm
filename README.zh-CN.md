@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://github.com/CoderSerio/java-npm/actions/workflows/ci.yml"><img src="https://github.com/CoderSerio/java-npm/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
-  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/node-%E2%89%A526-004c34" alt="Node.js 26 或更新版本"></a>
+  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/node-%E2%89%A522-004c34" alt="Node.js 22 或更新版本"></a>
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/status-alpha-27cd77" alt="Alpha"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-004c34" alt="MIT 许可"></a>
 </p>
@@ -37,14 +37,14 @@ Spring Initializr 提供初始工程，Maven 负责依赖解析和构建。最�
 
 ## 快速开始
 
-在 macOS 或 Linux 上准备 **Node.js 26+**。jpm 可以代为安装 **JDK 21**，无需另外安装 Maven。
+在 macOS 或 Linux 上准备 **Node.js 22+**。jpm 可以代为安装 **JDK 21**，无需另外安装 Maven。
 
 <!-- publication-status:start -->
-首个 npm alpha 正在准备中。以下 registry 安装命令在发布后可用；现在可以[从源码构建](CONTRIBUTING.md#development-setup)体验。
+Homebrew 会自动安装所需的 Node 运行时。首个 npm 版本仍在准备中，也可以[从源码构建](CONTRIBUTING.md#development-setup)。
 <!-- publication-status:end -->
 
 ```sh
-npm install --global java-npm@alpha
+brew install coderserio/tap/jpm
 jpm create my-app --java 21 -y
 cd my-app
 jpm jdk use 21

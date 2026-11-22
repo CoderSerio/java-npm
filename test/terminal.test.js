@@ -103,7 +103,7 @@ test('menu cancellation restores raw mode, cursor, and listeners', async t => {
   t.mock.method(stdout, 'write', value => { output.push(String(value)); return true; });
   const keypress = stdin.listenerCount('keypress'), resize = stdout.listenerCount('resize'), interrupt = process.listenerCount('SIGINT');
   const pending = choose('Choose', [{ label: 'Create a project', value: 'create' }], {
-    header: { version: '0.1.0-alpha.0', subtitle: 'A familiar workflow for Java.', details: ['Node 26', 'Project demo'] },
+    header: { version: '0.1.0-alpha.0', subtitle: 'A familiar workflow for Java.', details: ['Node 22', 'Project demo'] },
   });
   assert.ok(stripVTControlCharacters(output.join('')).trimEnd().split('\n').length <= 6);
   stdin.emit('keypress', '\x03', { name: 'c', ctrl: true });

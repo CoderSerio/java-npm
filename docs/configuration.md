@@ -81,3 +81,17 @@ The selected JDK runs Maven; `java.version` remains the compilation target. A ne
 The selection records only a major version, not a specific installation path or distribution. Matching `JAVA_HOME` is preferred during local discovery. Downloads use the latest available Temurin release for that major and reuse an existing complete jpm cache without upgrading it. Remote lists may show full versions, but exact distribution/build selection is not currently supported.
 
 `jdk use` cannot change its parent shell. To change the current bash/zsh environment, use `eval "$(jpm jdk env)"`. No shell startup files or automatic directory hooks are installed.
+
+## Environment variables and mirrors
+
+Project creation and JDK downloads reach two external services. Both can be redirected without changing a project, so jpm keeps working behind mirrors or in restricted networks:
+
+| Variable | Default | Used by |
+| --- | --- | --- |
+| `JPM_INITIALIZR_URL` | `https://start.spring.io` | `jpm create` — Initializr metadata and project archive |
+| `JPM_ADOPTIUM_API` | `https://api.adoptium.net` | `jpm jdk list --remote` and `jdk install` — release metadata |
+| `JPM_ADOPTIUM_DOWNLOAD` | `https://github.com/adoptium` | `jdk install` — JDK archive downloads |
+
+`jpm create --initializr <url>` overrides the Initializr endpoint for one invocation. The Adoptium values must use https; a download mirror may host the metadata API, the archives, or both. These are machine-level settings, so they belong in the shell environment or user configuration, not in a committed `.jpmrc`.
+
+`JPM_ADOPTIUM_DOWNLOAD` only relocates the archive bytes; the expected size and SHA-256 still come from the official Adoptium API, so a bad mirror cannot change what jpm verifies against. Setting `JPM_ADOPTIUM_API` as well moves the digest source to that mirror, in which case verification only proves the archive matches what that mirror published — treat a fully mirrored API as a trust boundary you control, not as official Adoptium metadata.

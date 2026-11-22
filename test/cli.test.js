@@ -9,6 +9,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { c as pack } from 'tar';
 
+delete process.env.JPM_ADOPTIUM_API;
+delete process.env.JPM_ADOPTIUM_DOWNLOAD;
+delete process.env.JPM_INITIALIZR_URL;
+
 const execute = promisify(execFile);
 const binary = fileURLToPath(new URL('../bin/jpm.js', import.meta.url));
 

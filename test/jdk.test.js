@@ -10,6 +10,9 @@ import { promisify } from 'node:util';
 import { c as pack } from 'tar';
 import { installJdk, listJdks, listRemoteJdks, resolveJdk, shellEnvironment } from '../dist/jdk.js';
 
+delete process.env.JPM_ADOPTIUM_API;
+delete process.env.JPM_ADOPTIUM_DOWNLOAD;
+
 const execute = promisify(execFile);
 
 async function fixture(t) {
@@ -42,6 +45,22 @@ function mockDownload(data, checksum = createHash('sha256').update(data).digest(
       return Response.json([release]);
     }
     assert.equal(new URL(url).hostname, 'github.com');
+    return new Response(data);
+  };
+}
+
+function mockMirrorDownload(data) {
+  let calls = 0;
+  return async url => {
+    calls++;
+    if (calls === 1) {
+      const request = new URL(url);
+      assert.equal(request.hostname, 'api.adoptium.net');
+      const release = remoteRelease(21);
+      Object.assign(release.binaries[0].package, { checksum: createHash('sha256').update(data).digest('hex'), size: data.length });
+      return Response.json([release]);
+    }
+    assert.equal(new URL(url).hostname, 'mirror.example');
     return new Response(data);
   };
 }
@@ -222,6 +241,17 @@ test('installs a missing JDK only when requested and reuses its verified archive
   assert.equal((await installJdk(21, { ...options, fetch: () => assert.fail('must not fetch an installed JDK') })).home, installed.home);
 });
 
+test('serves JDK archives from a configured download mirror', async t => {
+  const { directory, options } = await fixture(t);
+  const source = path.join(directory, 'source');
+  await fakeJdk(path.join(source, 'jdk-21'), 21);
+  const archivePath = path.join(directory, 'jdk.tar.gz');
+  await pack({ gzip: true, file: archivePath, cwd: source }, ['jdk-21']);
+  const data = await readFile(archivePath);
+  const installed = await installJdk(21, { ...options, downloadBase: 'https://mirror.example/adoptium', fetch: mockMirrorDownload(data) });
+  assert.equal(installed.home, path.join(options.cacheRoot, '21'));
+});
+
 test('identifies Temurin and its complete runtime version without mislabeling other vendors', async t => {
   const { options } = await fixture(t);
   for (const [major, vendor, runtimeVersion, architecture] of [[21, 'Eclipse Adoptium', '21.0.13+9-LTS', 'aarch64'], [25, 'Azul Systems, Inc.', '25.0.1+1-LTS', 'amd64']]) {
@@ -259,6 +289,20 @@ test('summarizes the latest remote GA JDK for each supported major without writi
   assert.deepEqual(releases, [25, 21, 17].map(version => ({ version, runtimeVersion: `${version}.0.1+1`, distribution: 'temurin', architecture: 'x64' })));
   assert.equal(calls.length, 5);
   assert.deepEqual(await readdir(directory), []);
+});
+
+test('uses a mirrored Adoptium API base when configured', async t => {
+  const { options } = await fixture(t);
+  const calls = [];
+  const releases = await listRemoteJdks(21, { ...options, apiBase: 'https://mirror.example/adoptium', fetch: async input => {
+    const url = new URL(input);
+    calls.push(url.pathname);
+    assert.equal(url.hostname, 'mirror.example');
+    return Response.json([remoteRelease(21)]);
+  } });
+  assert.deepEqual(releases, [{ version: 21, runtimeVersion: '21.0.1+1', distribution: 'temurin', architecture: 'x64' }]);
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0].startsWith('/adoptium/v3/assets/feature_releases/21/ga'));
 });
 
 test('paginates a requested major and deduplicates remote builds', async t => {

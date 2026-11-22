@@ -36,7 +36,7 @@ test('release archive contains built modules and no source, tests, or compiler',
   assert.deepEqual(manifest.bin, { jpm: 'bin/jpm.js' });
   assert.equal(manifest.private, undefined);
   assert.deepEqual(manifest.publishConfig, { access: 'public', tag: 'alpha' });
-  assert.equal(manifest.engines.node, '>=26');
+  assert.equal(manifest.engines.node, '>=22');
   assert.equal(manifest.license, 'MIT');
   assert.ok(Object.values(manifest.dependencies).every(specifier => !specifier.startsWith('file:')));
 });

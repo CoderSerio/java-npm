@@ -11,12 +11,13 @@ Changes are recorded here before release. An entry under **Unreleased** is not e
 - Maven install, test, build, dependency tree, and development commands.
 - JDK discovery, explicit Temurin installation with checksum verification, project/user selection, and shell environment output.
 - Read-only environment diagnostics and declared dependency listing.
+- Configurable Spring Initializr endpoint (`--initializr` / `JPM_INITIALIZR_URL`) and Adoptium API/download mirrors (`JPM_ADOPTIUM_API` / `JPM_ADOPTIUM_DOWNLOAD`).
 - macOS/Linux CI, contribution templates, project documentation, and MIT licensing.
 
 ### Changed
 
 - CLI implementation migrated to strict TypeScript 7 with compiled ESM output.
-- Minimum Node.js version raised to 26.
+- Minimum Node.js version set to 22.
 - Generated projects use a separately installed jpm CLI instead of embedding a CLI archive or npm dependency.
 
 ### Fixed
