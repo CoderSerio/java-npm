@@ -8,7 +8,7 @@ This is a direction for discussion, not a delivery schedule. Features become sup
 - JSON-managed Maven dependencies and POM synchronization.
 - Development compilation/restart, tests, JAR builds, dependency inspection, and diagnostics.
 - JDK discovery, major-version selection, shell exports, and explicit verified Temurin installation.
-- Node 26+, macOS/Linux, and a separately installed CLI.
+- Node 22+, macOS/Linux, and a separately installed CLI.
 
 ## Next priorities
 

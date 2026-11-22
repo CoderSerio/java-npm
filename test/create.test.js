@@ -8,6 +8,8 @@ import test from 'node:test';
 import * as tar from 'tar';
 import { createProject } from '../dist/create.js';
 
+delete process.env.JPM_INITIALIZR_URL;
+
 const metadata = {
   bootVersion: { default: '4.1.2', values: [{ id: '4.1.2' }] },
   javaVersion: { default: '17', values: [{ id: '17' }, { id: '21' }] },
@@ -88,13 +90,30 @@ test('create preserves official dependencies and wrappers and supplies a runnabl
   const sourceDirectory = fileURLToPath(new URL('../', import.meta.url));
   assert.ok(!JSON.stringify(manifest).includes(sourceDirectory));
   const readme = await readFile(path.join(directory, 'README.md'), 'utf8');
-  assert.match(readme, /npm install --global java-npm@alpha/);
+  assert.match(readme, /brew install coderserio\/tap\/jpm/);
   assert.ok(!readme.includes(sourceDirectory));
   assert.match(await readFile(path.join(directory, 'pom.xml'), 'utf8'), /spring-boot-starter-webmvc-test/);
   assert.match(await readFile(path.join(directory, 'src/main/java/com/example/demo/HelloController.java'), 'utf8'), /Hello from jpm!/);
   assert.match(await readFile(path.join(directory, 'src/test/java/com/example/demo/JpmHelloTests.java'), 'utf8'), /assertEquals\(200, response.statusCode\(\)\)/);
   assert.equal(await readFile(path.join(directory, 'mvnw'), 'utf8'), '#!/bin/sh\nexit 0\n');
   assert.deepEqual(await readdir(cwd), ['demo']);
+});
+
+test('Initializr URL prefers the flag over the environment and applies to both requests', async t => {
+  const cwd = await workspace(t);
+  process.env.JPM_INITIALIZR_URL = 'https://env.example/init';
+  t.after(() => { delete process.env.JPM_INITIALIZR_URL; });
+  const requests = [];
+  t.mock.method(globalThis, 'fetch', async url => {
+    requests.push(new URL(url).toString());
+    return new URL(url).pathname.endsWith('/starter.tgz')
+      ? new Response(await archive(t), { headers: { 'content-type': 'application/x-compress' } })
+      : Response.json(metadata);
+  });
+  await createProject('demo', { cwd, initializrUrl: 'https://flag.example/init' });
+  assert.equal(requests.length, 2);
+  assert.ok(requests.every(u => u.startsWith('https://flag.example/init/')));
+  assert.ok(requests.some(u => new URL(u).pathname.endsWith('/starter.tgz')));
 });
 
 test('create uses the configured JDK default and an explicit Java version wins', async t => {

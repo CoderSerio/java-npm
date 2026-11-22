@@ -43,7 +43,7 @@ export async function inspectDoctor(cwd: string, options: DoctorOptions = {}) {
   const add = (name: string, status: DoctorCheck['status'], detail: string, action?: string) => checks.push({ name, status, detail, ...(action ? { action } : {}) });
 
   const nodeMajor = Number(String(nodeVersion).replace(/^v/, '').split('.')[0]);
-  add('Node.js', nodeMajor >= 26 ? 'ok' : 'error', String(nodeVersion), nodeMajor >= 26 ? undefined : 'Install Node.js 26 or newer.');
+  add('Node.js', nodeMajor >= 22 ? 'ok' : 'error', String(nodeVersion), nodeMajor >= 22 ? undefined : 'Install Node.js 22 or newer.');
   const supportedPlatform = ['darwin', 'linux'].includes(platform);
   add('Platform', supportedPlatform ? 'ok' : 'error', platform, supportedPlatform ? undefined : 'Run jpm on macOS or Linux; Windows is not supported yet.');
 

@@ -13,9 +13,19 @@ interface CreateOptions {
   boot?: string;
   group?: string;
   packageName?: string;
+  initializrUrl?: string;
 }
 
 const INITIALIZR = 'https://start.spring.io';
+
+function initializrBase(options: CreateOptions) {
+  const base = options.initializrUrl ?? process.env.JPM_INITIALIZR_URL ?? INITIALIZR;
+  const url = new URL(base);
+  if (url.protocol !== 'https:') throw new Error('The Initializr URL must use https.');
+  if (url.username || url.password) throw new Error('The Initializr URL must not contain credentials.');
+  if (/[?#\s]/.test(base)) throw new Error('The Initializr URL must not contain a query string, fragment, or whitespace.');
+  return base.replace(/\/+$/, '');
+}
 const MAX_ARCHIVE = 8 * 1024 * 1024;
 const MAX_EXPANDED = 16 * 1024 * 1024;
 const JAVA_KEYWORDS = new Set('abstract assert boolean break byte case catch char class const continue default do double else enum extends final finally float for goto if implements import instanceof int interface long native new package private protected public return short static strictfp super switch synchronized this throw throws transient try void volatile while true false null _'.split(' '));
@@ -25,24 +35,40 @@ function javaPackage(value: unknown) {
 }
 
 async function download(url: string, limit: number, accept: string) {
-  const response = await fetch(url, {
-    headers: { Accept: accept, 'User-Agent': 'jpm/0.1.0' },
-    signal: AbortSignal.timeout(30_000),
-  });
-  if (!response.ok) throw new Error(`Spring Initializr returned HTTP ${response.status}. Check the requested Spring Boot and Java versions.`);
-  if (Number(response.headers.get('content-length')) > limit) {
-    await response.body?.cancel();
-    throw new Error('Spring Initializr response exceeds the download limit.');
+  const signal = AbortSignal.timeout(30_000);
+  let current = url;
+  for (let redirects = 0; redirects <= 5; redirects++) {
+    const response = await fetch(current, {
+      headers: { Accept: accept, 'User-Agent': 'jpm/0.1.0' },
+      signal,
+      redirect: 'manual',
+    });
+    if (response.status >= 300 && response.status < 400) {
+      await response.body?.cancel();
+      const location = response.headers.get('location');
+      if (!location) throw new Error('Spring Initializr returned a redirect without a Location header.');
+      const next = new URL(location, current);
+      if (next.protocol !== 'https:') throw new Error('Spring Initializr redirected to a non-HTTPS URL.');
+      if (next.username || next.password) throw new Error('Spring Initializr redirected to a URL with credentials.');
+      current = next.href;
+      continue;
+    }
+    if (!response.ok) throw new Error(`Spring Initializr returned HTTP ${response.status}. Check the requested Spring Boot and Java versions.`);
+    if (Number(response.headers.get('content-length')) > limit) {
+      await response.body?.cancel();
+      throw new Error('Spring Initializr response exceeds the download limit.');
+    }
+    if (!response.body) throw new Error('Spring Initializr returned an empty response.');
+    const chunks = [];
+    let size = 0;
+    for await (const chunk of response.body) {
+      size += chunk.length;
+      if (size > limit) throw new Error('Spring Initializr response exceeds the download limit.');
+      chunks.push(chunk);
+    }
+    return Buffer.concat(chunks);
   }
-  if (!response.body) throw new Error('Spring Initializr returned an empty response.');
-  const chunks = [];
-  let size = 0;
-  for await (const chunk of response.body) {
-    size += chunk.length;
-    if (size > limit) throw new Error('Spring Initializr response exceeds the download limit.');
-    chunks.push(chunk);
-  }
-  return Buffer.concat(chunks);
+  throw new Error('Spring Initializr redirected too many times.');
 }
 
 function dependenciesFromPom(xml: string, expected: Omit<JavaConfiguration, 'dependencies'>) {
@@ -184,7 +210,8 @@ export async function createProject(name: string, options: CreateOptions = {}) {
   } catch (error) {
     if (errorCode(error) !== 'ENOENT') throw error;
   }
-  const metadata: unknown = JSON.parse((await download(`${INITIALIZR}/`, 2 * 1024 * 1024, 'application/vnd.initializr.v2.3+json')).toString());
+  const initializr = initializrBase(options);
+  const metadata: unknown = JSON.parse((await download(`${initializr}/`, 2 * 1024 * 1024, 'application/vnd.initializr.v2.3+json')).toString());
   if (!isRecord(metadata) || !isRecord(metadata.bootVersion) || !isRecord(metadata.javaVersion)
     || !Array.isArray(metadata.bootVersion.values) || !Array.isArray(metadata.javaVersion.values)) {
     throw new Error('Spring Initializr returned invalid version metadata.');
@@ -196,7 +223,7 @@ export async function createProject(name: string, options: CreateOptions = {}) {
   const staging = await mkdtemp(path.join(cwd, '.jpm-create-'));
   let reserved = false;
   try {
-    const project = await extractArchive(await download(`${INITIALIZR}/starter.tgz?${query}`, MAX_ARCHIVE, 'application/x-compress'), staging);
+    const project = await extractArchive(await download(`${initializr}/starter.tgz?${query}`, MAX_ARCHIVE, 'application/x-compress'), staging);
     const java = { version: javaVersion, springBoot, groupId, artifactId: name, packageName };
     const parsed = dependenciesFromPom(await readFile(path.join(project, 'pom.xml'), 'utf8'), java);
     const manifest = {
@@ -217,7 +244,7 @@ export async function createProject(name: string, options: CreateOptions = {}) {
       await mkdir(path.dirname(filename), { recursive: true });
       await writeFile(filename, content, { flag: 'wx' });
     }
-    await writeFile(path.join(project, 'README.md'), `# ${name}\n\nA Spring Boot application created with jpm. Requires jpm on PATH, Node.js 26+ and Java ${javaVersion}.\n\n\`\`\`sh\njpm jdk use ${javaVersion}\njpm install\njpm dev\n# In another terminal:\ncurl http://localhost:8080/\njpm test\njpm build\n\`\`\`\n\nGET / returns \`{"message":"Hello from jpm!"}\`.\n\nEdit Java dependencies in \`package.json\` under \`java.dependencies\`, then run \`jpm install\`. The POM is generated; do not edit it directly.\n\nThe project JDK is selected in \`.jpmrc\` (\`java=${javaVersion}\`). \`package.json.java.version\` remains the compile target. Use \`jpm jdk list\` to see installed JDKs and \`jpm jdk use <major>\` to install a missing JDK and save a project selection. To also switch your current bash/zsh terminal, run \`eval "$(jpm jdk env)"\`.\n\nInstall the CLI with \`npm install --global java-npm@alpha\` before running these commands. Java dependencies are resolved by Maven through jpm; this project does not need npm install, node_modules, or a bundled CLI archive. npm scripts are optional aliases for an already installed jpm.\n`, { flag: 'wx' });
+    await writeFile(path.join(project, 'README.md'), `# ${name}\n\nA Spring Boot application created with jpm. Requires jpm on PATH, Node.js 22+ and Java ${javaVersion}.\n\n\`\`\`sh\njpm jdk use ${javaVersion}\njpm install\njpm dev\n# In another terminal:\ncurl http://localhost:8080/\njpm test\njpm build\n\`\`\`\n\nGET / returns \`{"message":"Hello from jpm!"}\`.\n\nEdit Java dependencies in \`package.json\` under \`java.dependencies\`, then run \`jpm install\`. The POM is generated; do not edit it directly.\n\nThe project JDK is selected in \`.jpmrc\` (\`java=${javaVersion}\`). \`package.json.java.version\` remains the compile target. Use \`jpm jdk list\` to see installed JDKs and \`jpm jdk use <major>\` to install a missing JDK and save a project selection. To also switch your current bash/zsh terminal, run \`eval "$(jpm jdk env)"\`.\n\nInstall the CLI with \`brew install coderserio/tap/jpm\` before running these commands. Java dependencies are resolved by Maven through jpm; this project does not need npm install, node_modules, or a bundled CLI archive. npm scripts are optional aliases for an already installed jpm.\n`, { flag: 'wx' });
     const ignore = path.join(project, '.gitignore');
     const originalIgnore = await readFile(ignore, 'utf8').catch(error => { if (errorCode(error) === 'ENOENT') return ''; throw error; });
     await writeFile(ignore, `${originalIgnore.trimEnd()}\nnode_modules/\n.jpm/\n`);

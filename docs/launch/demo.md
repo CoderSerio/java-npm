@@ -1,6 +1,6 @@
 # Demo recording script
 
-Aim for a 45–60 second edited walkthrough, not a claim that first-time setup takes under a minute. Use a new disposable directory, the published CLI, Node 26+, and JDK 21. Preflight network access, Maven cache, and the application port. If downloads are cut or sped up, label that edit.
+Aim for a 45–60 second edited walkthrough, not a claim that first-time setup takes under a minute. Use a new disposable directory, the published CLI, Node 22+, and JDK 21. Preflight network access, Maven cache, and the application port. If downloads are cut or sped up, label that edit.
 
 | Segment | Action | Explanation |
 | --- | --- | --- |

@@ -35,6 +35,8 @@ interface JdkOptions {
   fetch?: typeof globalThis.fetch;
   installIfMissing?: boolean;
   onInstall?: () => void;
+  apiBase?: string;
+  downloadBase?: string;
 }
 
 const execute = promisify(execFile);
@@ -45,6 +47,24 @@ export function majorVersion(version: unknown) {
     throw new Error('Java version must be a major version from 17 to 99, such as 21.');
   }
   return Number(version);
+}
+
+function adoptiumApi(options: JdkOptions) {
+  const base = options.apiBase ?? process.env.JPM_ADOPTIUM_API ?? 'https://api.adoptium.net';
+  const url = new URL(base);
+  if (url.protocol !== 'https:') throw new Error('JPM_ADOPTIUM_API must use https.');
+  if (url.username || url.password) throw new Error('JPM_ADOPTIUM_API must not contain credentials.');
+  if (/[?#\s]/.test(base)) throw new Error('JPM_ADOPTIUM_API must not contain a query string, fragment, or whitespace.');
+  return base.replace(/\/+$/, '');
+}
+
+function adoptiumDownload(options: JdkOptions) {
+  const base = options.downloadBase ?? process.env.JPM_ADOPTIUM_DOWNLOAD ?? 'https://github.com/adoptium';
+  const url = new URL(base);
+  if (url.protocol !== 'https:') throw new Error('JPM_ADOPTIUM_DOWNLOAD must use https.');
+  if (url.username || url.password) throw new Error('JPM_ADOPTIUM_DOWNLOAD must not contain credentials.');
+  if (/[?#\s]/.test(base)) throw new Error('JPM_ADOPTIUM_DOWNLOAD must not contain a query string, fragment, or whitespace.');
+  return base.replace(/\/+$/, '');
 }
 
 function settings(options: JdkOptions) {
@@ -171,6 +191,7 @@ async function exists(file: string) {
 
 async function readResponse(response: Response, limit: number) {
   if (!response.ok) throw new Error(`JDK metadata request failed: HTTP ${response.status}.`);
+  if (response.url && new URL(response.url).protocol !== 'https:') throw new Error('JDK metadata redirected to an insecure URL.');
   if (!response.body) throw new Error('JDK metadata request returned an empty response.');
   const chunks = [];
   let size = 0;
@@ -182,6 +203,22 @@ async function readResponse(response: Response, limit: number) {
   return Buffer.concat(chunks).toString('utf8');
 }
 
+async function secureFetch(request: typeof globalThis.fetch, input: string | URL, init: RequestInit = {}) {
+  let current = input;
+  for (let redirects = 0; redirects <= 5; redirects++) {
+    const response = await request(current, { ...init, redirect: 'manual' });
+    if (response.status < 300 || response.status >= 400) return response;
+    await response.body?.cancel();
+    const location = response.headers.get('location');
+    if (!location) throw new Error('Redirect without a Location header.');
+    const next = new URL(location, current);
+    if (next.protocol !== 'https:') throw new Error('Refusing to follow a redirect to a non-HTTPS URL.');
+    if (next.username || next.password) throw new Error('Refusing to follow a redirect to a URL with credentials.');
+    current = next;
+  }
+  throw new Error('Too many redirects.');
+}
+
 function downloadTarget(options: JdkOptions) {
   const { platform } = settings(options);
   const arch = options.arch ?? process.arch;
@@ -190,7 +227,7 @@ function downloadTarget(options: JdkOptions) {
   return { architecture, os: platform === 'darwin' ? 'mac' : 'linux' } as const;
 }
 
-function archivePackage(archive: unknown) {
+function archivePackage(archive: unknown, downloadBase: string) {
   if (!isRecord(archive) || typeof archive.link !== 'string' || typeof archive.checksum !== 'string' || !/^[a-f\d]{64}$/i.test(archive.checksum)
     || typeof archive.size !== 'number' || !Number.isSafeInteger(archive.size) || archive.size <= 0 || archive.size > MAX_ARCHIVE_BYTES) {
     throw new Error('Adoptium did not return valid JDK archive metadata.');
@@ -199,16 +236,19 @@ function archivePackage(archive: unknown) {
   if (url.protocol !== 'https:' || url.hostname !== 'github.com' || !url.pathname.startsWith('/adoptium/')) {
     throw new Error('Adoptium returned an unexpected JDK download URL.');
   }
-  return { url, size: archive.size, checksum: archive.checksum };
+  // Serve the same archive path from the configured download base (mirror or the default github.com/adoptium).
+  const base = new URL(downloadBase);
+  base.pathname = base.pathname.replace(/\/+$/, '') + url.pathname.slice('/adoptium'.length);
+  return { url: base, size: archive.size, checksum: archive.checksum };
 }
 
-function releaseUrl(major: number, target: ReturnType<typeof downloadTarget>, pageSize: number, page = 0) {
+function releaseUrl(major: number, target: ReturnType<typeof downloadTarget>, pageSize: number, page = 0, apiBase = 'https://api.adoptium.net') {
   const query = new URLSearchParams({ ...target, heap_size: 'normal', image_type: 'jdk', jvm_impl: 'hotspot', project: 'jdk', vendor: 'eclipse',
     page: String(page), page_size: String(pageSize), sort_method: 'DEFAULT', sort_order: 'DESC' });
-  return `https://api.adoptium.net/v3/assets/feature_releases/${major}/ga?${query}`;
+  return `${apiBase}/v3/assets/feature_releases/${major}/ga?${query}`;
 }
 
-function releasePackage(asset: unknown, major: number, target: ReturnType<typeof downloadTarget>) {
+function releasePackage(asset: unknown, major: number, target: ReturnType<typeof downloadTarget>, downloadBase: string) {
   if (!isRecord(asset) || asset.release_type !== 'ga' || asset.vendor !== 'eclipse' || !isRecord(asset.version_data)
     || asset.version_data.major !== major || typeof asset.version_data.openjdk_version !== 'string' || asset.version_data.openjdk_version.length > 128
     || !/^\d+(?:\.\d+)*\+\d+(?:-LTS)?$/.test(asset.version_data.openjdk_version)
@@ -219,21 +259,22 @@ function releasePackage(asset: unknown, major: number, target: ReturnType<typeof
     && item.image_type === 'jdk' && item.jvm_impl === 'hotspot' && item.heap_size === 'normal' && item.project === 'jdk');
   if (!isRecord(binary)) throw new Error('Adoptium returned a JDK release for an unexpected platform or image type.');
   const jdk: RemoteJdk = { version: major, runtimeVersion: asset.version_data.openjdk_version.replace(/-LTS$/, ''), distribution: 'temurin', architecture: target.architecture };
-  return { jdk, archive: archivePackage(binary.package) };
+  return { jdk, archive: archivePackage(binary.package, downloadBase) };
 }
 
 export async function listRemoteJdks(version?: string | number, options: JdkOptions = {}): Promise<RemoteJdk[]> {
   const major = version === undefined ? undefined : majorVersion(version);
   const target = downloadTarget(options);
+  const apiBase = adoptiumApi(options);
   const request = options.fetch ?? globalThis.fetch;
   const signal = AbortSignal.timeout(30_000);
   const readMetadata = async (url: string) => {
-    const response = await request(url, { signal });
+    const response = await secureFetch(request, url, { signal });
     return JSON.parse(await readResponse(response, 2 * 1024 * 1024)) as unknown;
   };
   let versions = major === undefined ? [] : [major];
   if (major === undefined) {
-    const available = await readMetadata('https://api.adoptium.net/v3/info/available_releases');
+    const available = await readMetadata(`${apiBase}/v3/info/available_releases`);
     if (!isRecord(available) || !Array.isArray(available.available_releases)
       || !available.available_releases.every(value => Number.isSafeInteger(value) && Number(value) > 0 && Number(value) <= 99)) {
       throw new Error('Adoptium returned invalid available Java versions.');
@@ -244,12 +285,12 @@ export async function listRemoteJdks(version?: string | number, options: JdkOpti
     const found = new Map<string, RemoteJdk>();
     const pageSize = major === undefined ? 1 : 20;
     for (let page = 0; page < 100; page++) {
-      const response = await request(releaseUrl(feature, target, pageSize, page), { signal });
+      const response = await secureFetch(request, releaseUrl(feature, target, pageSize, page, apiBase), { signal });
       if (response.status === 404) return [...found.values()];
       const assets: unknown = JSON.parse(await readResponse(response, 2 * 1024 * 1024));
       if (!Array.isArray(assets) || assets.length > pageSize) throw new Error('Adoptium returned an invalid JDK release list.');
       for (const asset of assets) {
-        const { jdk } = releasePackage(asset, feature, target);
+        const { jdk } = releasePackage(asset, feature, target, 'https://github.com/adoptium');
         found.set(jdk.runtimeVersion, jdk);
       }
       if (major === undefined || assets.length < pageSize) return [...found.values()];
@@ -271,6 +312,8 @@ export async function installJdk(version: string | number, options: JdkOptions =
     throw new Error(`The existing JDK directory is incomplete or incompatible: ${destination}. Move it aside before retrying; jpm will not overwrite it.`);
   }
 
+  const apiBase = adoptiumApi(options);
+  const downloadBase = adoptiumDownload(options);
   await mkdir(cacheRoot, { recursive: true });
   const lock = `${destination}.lock`;
   try { await mkdir(lock); } catch (error) {
@@ -281,13 +324,12 @@ export async function installJdk(version: string | number, options: JdkOptions =
   try {
     staging = await mkdtemp(path.join(cacheRoot, '.install-'));
     const request = options.fetch ?? globalThis.fetch;
-    const response = await request(releaseUrl(major, target, 1), { signal: AbortSignal.timeout(30_000) });
+    const response = await secureFetch(request, releaseUrl(major, target, 1, 0, apiBase), { signal: AbortSignal.timeout(30_000) });
     const assets: unknown = JSON.parse(await readResponse(response, 2 * 1024 * 1024));
     if (!Array.isArray(assets) || assets.length !== 1) throw new Error(`Adoptium did not return a Temurin JDK ${major} GA release for this platform.`);
-    const { archive: { size: expectedSize, checksum, url } } = releasePackage(assets[0], major, target);
-    const download = await request(url, { signal: AbortSignal.timeout(300_000) });
+    const { archive: { size: expectedSize, checksum, url } } = releasePackage(assets[0], major, target, downloadBase);
+    const download = await secureFetch(request, url, { signal: AbortSignal.timeout(300_000) });
     if (!download.ok || !download.body) throw new Error(`JDK download failed: HTTP ${download.status}.`);
-    if (download.url && new URL(download.url).protocol !== 'https:') throw new Error('JDK download redirected to an insecure URL.');
     const archivePath = path.join(staging, 'jdk.tar.gz');
     const hash = createHash('sha256');
     let bytes = 0;

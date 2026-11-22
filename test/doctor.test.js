@@ -56,7 +56,7 @@ test('doctor aggregates malformed project/config, unsupported Node, and missing 
   await rm(path.join(cwd, 'mvnw'));
   await rm(path.join(cwd, '.mvn', 'wrapper', 'maven-wrapper.properties'));
   const before = await snapshot(cwd);
-  const result = await inspectDoctor(cwd, { ...options, nodeVersion: '25.0.0' });
+  const result = await inspectDoctor(cwd, { ...options, nodeVersion: '21.0.0' });
   assert.equal(result.ok, false);
   for (const name of ['Node.js', 'Project', 'Java configuration', 'Maven Wrapper']) assert.equal(named(result, name).status, 'error');
   assert.match(named(result, 'Project').action, /jpm doctor/);

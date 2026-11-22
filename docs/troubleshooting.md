@@ -6,7 +6,7 @@ Start with `jpm --version`, `node --version`, and `jpm doctor --json` from the p
 | --- | --- |
 | `jpm: command not found` | Install `java-npm` globally, then check your npm global bin directory is on PATH. Restart/reconfigure your terminal if needed. |
 | npm cannot find `java-npm@alpha` | The first alpha may not be published yet. Check npm availability; use the source-build path in CONTRIBUTING meanwhile. |
-| Node 26 required | Select Node 26+ with your version manager. Check `node --version` in the same shell running jpm. |
+| Node 22 required | Select Node 22+ with your version manager. Check `node --version` in the same shell running jpm. |
 | No project manifest | Run project commands from the generated application's root, not the jpm source repository or a source subdirectory. |
 | JDK not found | Run `jpm jdk list`; select a complete JDK with both java and javac, or explicitly run `jpm jdk install <major>`. |
 | JDK older than target | Select a JDK at least as new as `package.json.java.version`; do not silently lower the compilation target. |

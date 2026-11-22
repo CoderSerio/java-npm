@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://github.com/CoderSerio/java-npm/actions/workflows/ci.yml"><img src="https://github.com/CoderSerio/java-npm/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
-  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/node-%E2%89%A526-004c34" alt="Node.js 26 or newer"></a>
+  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/node-%E2%89%A522-004c34" alt="Node.js 22 or newer"></a>
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/status-alpha-27cd77" alt="Alpha"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-004c34" alt="MIT license"></a>
 </p>
@@ -37,14 +37,14 @@ Spring Initializr provides the starting project. Maven handles dependency resolu
 
 ## Quick start
 
-Use **Node.js 26+** on macOS or Linux. jpm can install **JDK 21** for you; a separate Maven installation is not required.
+Use **Node.js 22+** on macOS or Linux. jpm can install **JDK 21** for you; a separate Maven installation is not required.
 
 <!-- publication-status:start -->
-The first npm alpha is being prepared. The registry installation below becomes available after publication; you can [build from source](CONTRIBUTING.md#development-setup) now.
+Homebrew installs the required Node runtime. The first npm registry release is still pending. You can also [build from source](CONTRIBUTING.md#development-setup).
 <!-- publication-status:end -->
 
 ```sh
-npm install --global java-npm@alpha
+brew install coderserio/tap/jpm
 jpm create my-app --java 21 -y
 cd my-app
 jpm jdk use 21

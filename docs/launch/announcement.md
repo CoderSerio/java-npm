@@ -16,7 +16,7 @@ jpm install
 jpm dev
 ```
 
-需要 Node 26+、macOS/Linux 和 JDK 21；没有合适 JDK 时，可以显式执行 `jpm jdk install 21`。初次创建和下载依赖需要联网。
+需要 Node 22+、macOS/Linux 和 JDK 21；没有合适 JDK 时，可以显式执行 `jpm jdk install 21`。初次创建和下载依赖需要联网。
 
 这一版聚焦新建的单模块 Spring MVC 项目，也提供 JDK 选择、依赖查看和 `doctor` 环境检查。Windows、Gradle、多模块以及任意现有 Maven 项目的导入还不在支持范围内。Alpha 阶段的命令和配置可能调整，欢迎带着具体场景来试用和反馈。
 
@@ -38,7 +38,7 @@ jpm install
 jpm dev
 ```
 
-You'll need Node 26+, macOS/Linux, and JDK 21. If needed, explicitly install the JDK with `jpm jdk install 21`. Initial project creation and dependency downloads require network access.
+You'll need Node 22+, macOS/Linux, and JDK 21. If needed, explicitly install the JDK with `jpm jdk install 21`. Initial project creation and dependency downloads require network access.
 
 This alpha focuses on new single-module Spring MVC projects. It also includes JDK selection, dependency inspection, and a `doctor` command. Windows, Gradle, multi-module builds, and arbitrary existing Maven project imports are outside its current scope. Commands and configuration may change during alpha; concrete bug reports and workflow feedback are welcome.
 

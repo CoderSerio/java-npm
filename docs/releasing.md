@@ -40,7 +40,24 @@ Use the installed CLI to create a disposable project, resolve dependencies, run 
 
 If anything in the package changes after inspection, rebuild, repack, and verify the new archive. Keep the exact verified artifact for publication.
 
-## Authenticate and publish
+## Publish through the Homebrew tap
+
+Homebrew can ship independently of the npm registry. Use the verified package archive from the previous step and the lockfile from the same clean release commit. Build a separate tarball with its production dependencies so installing jpm only needs Homebrew and its Node runtime.
+
+```sh
+version=$(node -p 'require("./package.json").version')
+bundle="$release_dir/jpm-$version"
+mkdir "$bundle"
+tar -xzf "$release_dir/$archive" --strip-components=1 -C "$bundle"
+cp package-lock.json "$bundle/"
+npm ci --prefix "$bundle" --omit=dev --ignore-scripts --no-audit --no-fund
+tar -czf "$release_dir/jpm-$version-homebrew.tar.gz" -C "$release_dir" "jpm-$version"
+shasum -a 256 "$release_dir/jpm-$version-homebrew.tar.gz"
+```
+
+Test the bundled CLI and confirm its dependencies are portable to the supported platforms. Attach that exact archive to the GitHub prerelease for the verified commit. Set the URL, version and SHA-256 in `Formula/jpm.rb` in `CoderSerio/homebrew-tap`. Verify `brew install coderserio/tap/jpm` and `brew test coderserio/tap/jpm` against the published archive. If npm ships later, use the same source tag.
+
+## Authenticate and publish to npm
 
 The maintainer signs in locally with npm. Do not paste tokens, passwords, or one-time codes into issues, PRs, or chat logs.
 

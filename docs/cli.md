@@ -1,6 +1,6 @@
 # CLI reference
 
-The npm package `java-npm` installs the `jpm` command. Use `jpm --help` and `jpm --version` to inspect the installed CLI. Node 26+ and macOS/Linux are required.
+The npm package `java-npm` installs the `jpm` command. Use `jpm --help` and `jpm --version` to inspect the installed CLI. Node 22+ and macOS/Linux are required.
 
 Unless noted otherwise, project commands run from the directory containing the project's `package.json` and `mvnw`.
 
@@ -26,6 +26,7 @@ jpm create my-app --java 21 -y
 | `--group <groupId>` | Java group, default `com.example` |
 | `--package-name <package>` | Explicit Java package; otherwise derived from group/name |
 | `--template spring` | The only supported template: Spring MVC |
+| `--initializr <url>` | Override the Spring Initializr endpoint (https required); defaults to `JPM_INITIALIZR_URL`, then `start.spring.io` |
 | `-y`, `--yes` | Skip interactive questions; provide a project name |
 
 In an interactive terminal, missing name/Java choices are prompted. The Java selector offers the configured default, detected installed versions, and entry of another major version. Selecting a version does not install it; Spring Initializr still validates the requested Java target. Use `-y` and a project name to skip the wizard, including in a terminal.

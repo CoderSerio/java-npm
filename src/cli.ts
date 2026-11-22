@@ -14,7 +14,7 @@ import { banner, choose, cleanText, color, interactive, PromptCancelled, questio
 const help = `jpm — a frontend-friendly Java workflow
 
   jpm                            Open the interactive welcome page
-  jpm create <name> [--java 21] [--boot <version>] [--group com.example] [-y]
+  jpm create <name> [--java 21] [--boot <version>] [--group com.example] [--initializr <url>] [-y]
   jpm doctor [--json]             Inspect the project and environment without changing files
   jpm install                    Resolve Java dependencies with Maven Wrapper
   jpm add <group:artifact[@version]> [--scope test] [--optional]
@@ -34,7 +34,7 @@ const help = `jpm — a frontend-friendly Java workflow
 
 Pass Maven arguments after --, for example jpm build -- -DskipTests.
 .jpmrc selects the JDK; package.json java.version remains the compile target.
-Requires Node.js 26+. The first release supports macOS and Linux.
+Requires Node.js 22+. The first release supports macOS and Linux.
 `;
 
 async function cliVersion(): Promise<string> {
@@ -180,7 +180,7 @@ function requireCompatibleJdk(version: string | number | undefined, target: stri
 async function create(args: string[]) {
   const { values, positionals } = parseArgs({ args, allowPositionals: true, options: {
     java: { type: 'string' }, boot: { type: 'string' }, group: { type: 'string' },
-    'package-name': { type: 'string' }, template: { type: 'string' },
+    'package-name': { type: 'string' }, template: { type: 'string' }, initializr: { type: 'string' },
     yes: { type: 'boolean', short: 'y' },
   } });
   if (positionals.length > 1) throw new Error('Usage: jpm create <name> [--java 21] [-y]');
@@ -210,7 +210,7 @@ async function create(args: string[]) {
   if (!name) throw new Error('Provide a project name: jpm create my-app --java 21');
   console.log(wizard ? `\n  ${color('›', 'blue')} Creating ${cleanText(name)} from Spring Initializr…` : `Creating ${name} from Spring Initializr…`);
   java ??= defaultJava;
-  const result = await createProject(name, { java, boot: values.boot, group: values.group, packageName: values['package-name'] });
+  const result = await createProject(name, { java, boot: values.boot, group: values.group, packageName: values['package-name'], initializrUrl: values.initializr });
   if (wizard) {
     console.log(`\n  ${color('✓', 'blue')} Created ${cleanText(result.directory)}\n\n  ${color('Next steps', 'text')}\n\n    cd ${name}\n    jpm jdk use ${java}\n    jpm install\n    jpm dev\n\n  After the application starts, open http://localhost:8080.\n  jdk use downloads Temurin only if a matching local JDK is missing.\n`);
   } else console.log(`\nCreated ${result.directory}\n\n  cd ${name}\n  jpm jdk use ${java}\n  jpm install\n  jpm dev\n\nThen open http://localhost:8080. jdk use downloads Temurin only if a matching local JDK is missing.`);

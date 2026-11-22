@@ -24,7 +24,9 @@ export function color(text: string, tone: Tone) {
 }
 
 export function cleanText(text: string) {
-  return stripVTControlCharacters(text).replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, ' ').replace(/[\u202a-\u202e\u2066-\u2069]/g, '');
+  return stripVTControlCharacters(text.replace(/\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)/g, ''))
+    .replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, ' ')
+    .replace(/[\u202a-\u202e\u2066-\u2069]/g, '');
 }
 
 function cellWidth(character: string) {

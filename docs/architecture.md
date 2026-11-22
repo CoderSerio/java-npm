@@ -37,7 +37,7 @@ TypeScript 7 compiles sources to ESM in `dist/`. npm ships compiled JavaScript, 
 - JSON is authoritative for managed POMs; manual POM edits are detected instead of overwritten.
 - Failed preflight does not save a dependency; Maven failure after saving keeps the declaration and explains recovery.
 - JDK choice and Java compilation target are distinct. A child environment does not mutate the caller's shell.
-- Archive validation limits paths, entry types, and size. JDK downloads are checked against official metadata.
+- Archive validation limits paths, entry types, and size. JDK downloads are checked against size and SHA-256 metadata — the official Adoptium API by default, or the mirror selected by `JPM_ADOPTIUM_API` when configured.
 - A failed development compilation does not trigger a successful reload. Signal handling covers Maven's process group.
 - Generated Java applications have no npm dependency on jpm or bundled CLI archive. npm is needed to install the CLI, not for each Java build.
 
